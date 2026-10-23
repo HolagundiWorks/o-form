@@ -2,12 +2,13 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-"""O-Form identity, matching the OSAS suite mark and the light shell.
+"""O-Form identity — OSAS suite mark, light shell, pastel green accent.
 
-The arcs are the suite mark (a left half-ring, a lower half-ring, and a
-centre ring). O-Studio, O-CoreOp, and O-Draft fill the plate with their
-accent and draw the arcs in white. O-Form's accent is a pastel green, so
-the arcs are drawn in the suite ink, which stays readable on that plate.
+O-Form is a clone of Blender. Display strings follow the same pattern as
+O-CoreOp / O-Studio / O-Draft: product name, one-line role, suite line,
+developer credit. The arcs are the suite mark (left half-ring, lower
+half-ring, centre ring). Sister apps fill the plate with a saturated
+accent and draw white arcs; O-Form's pastel plate needs ink arcs.
 """
 
 import os
@@ -17,23 +18,28 @@ import zlib
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Suite light shell (Architecture Office Suit / OSAS).
-FOG = (242, 244, 247)       # page background
-SOFT = (236, 238, 242)      # navigation pane
-WHITE = (255, 255, 255)     # menu bar and cards
-INK = (23, 24, 27)          # #17181B, the suite ink
-MUTED = (92, 99, 112)
-EDGE = (208, 212, 220)
-# Pastel green accent. Ink sits on it; a deeper green is only for
-# viewport selection, where the pastel would disappear on a light face.
-ACCENT = (198, 230, 211)    # #C6E6D3
-ACCENT_ON = (143, 203, 170)  # the same green, strong enough to read on a white button
+FOG = (242, 244, 247)       # #F2F4F7 page background
+SOFT = (236, 238, 242)      # #ECEEF2 navigation pane
+WHITE = (255, 255, 255)
+INK = (23, 24, 27)          # #17181B
+MUTED = (92, 99, 112)       # #5C6370
+EDGE = (208, 212, 220)      # #D0D4DC
+# Pastel green accent. Ink sits on it; SELECT is only for viewport picks.
+ACCENT = (198, 230, 211)    # #C6E6D3 plate / soft highlight
+ACCENT_ON = (143, 203, 170)  # #8FCBAA selected control fill
 ACCENT_PRESS = (176, 216, 193)
-SELECT = (63, 163, 106)
+SELECT = (63, 163, 106)     # #3FA36A selection / outline_sel
 
 PRODUCT = "O-Form"
 SUBTITLE = "Modeling"
+TAGLINE = "Push/pull solid modeling"
+SUITE = "OSAS · Open Source Architecture Suit"
+SUITE_FULL = "OSAS, the Open Source Architecture Suit"
 DEVELOPER = "Human Centric Works"
-SUITE = "OSAS, the Open Source Architecture Suit"
+COMPANY_LINE = "Human Centric Works · Hospet"
+DEVELOPED_BY = "Developed by Human Centric Works · Hospet"
+CLONE_OF = "A clone of Blender"
+LICENSE_LINE = "Licensed under the GNU General Public License, version 2 or later"
 
 # Suite mark, in the 194 box used by the other apps.
 _ART = 194.0

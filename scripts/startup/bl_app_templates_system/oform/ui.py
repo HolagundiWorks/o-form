@@ -188,10 +188,10 @@ class OFORM_MT_help(Menu):
 
     def draw(self, _context):
         layout = self.layout
-        layout.operator("wm.splash_about", text="About O-Form")
+        layout.operator("wm.splash_about", text="About " + brand.PRODUCT)
         layout.separator()
         layout.label(text=brand.SUITE)
-        layout.label(text="Developed by " + brand.DEVELOPER)
+        layout.label(text=brand.DEVELOPED_BY)
         layout.separator()
         layout.label(text="Space Select    E Eraser    B Paint")
         layout.label(text="L Line    A Arc    R Rectangle    C Circle")
@@ -235,26 +235,29 @@ def _draw_splash(self, _context):
     column.operator("wm.read_homefile", text="New")
     column.operator("wm.open_mainfile", text="Open...")
     column.separator()
+    column.label(text=brand.PRODUCT)
+    column.label(text=brand.TAGLINE)
+    column.separator()
     column.label(text=brand.SUITE)
     credit = column.row()
     credit.enabled = False
-    credit.label(text="Developed by " + brand.DEVELOPER)
+    credit.label(text=brand.DEVELOPED_BY)
 
 
 def _draw_about(self, _context):
     column = self.layout.column()
     column.label(text=brand.PRODUCT)
-    column.label(text=brand.SUBTITLE)
+    column.label(text=brand.TAGLINE)
     column.separator()
     column.label(text=brand.SUITE)
-    column.label(text="Developed by " + brand.DEVELOPER)
+    column.label(text=brand.DEVELOPED_BY)
     column.separator()
-    column.label(text="A fork of Blender " + bpy.app.version_string)
-    column.label(text="Licensed under the GNU General Public License")
+    column.label(text=brand.CLONE_OF + " " + bpy.app.version_string)
+    column.label(text=brand.LICENSE_LINE)
 
 
 def _draw_properties_header(self, _context):
-    # Pane header: the mark, the product name, and the one-line purpose.
+    # Pane header: the mark, the product name, and the one-line role.
     row = self.layout.row(align=True)
     try:
         row.template_icon(icon_value=brand.icon_id(), scale=1.6)
@@ -294,7 +297,7 @@ def _draw_status(self, context):
     layout.separator_spacer()
     credit = layout.row()
     credit.enabled = False
-    credit.label(text=brand.DEVELOPER)
+    credit.label(text=brand.COMPANY_LINE)
     layout.separator()
     box = layout.row(align=True)
     box.alignment = "RIGHT"
