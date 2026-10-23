@@ -2,11 +2,13 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-"""Point inference for O-Form tools.
+"""SketchUp-style inference: working planes, snaps, locks, and guide cues.
 
-Snap order matches a push/pull modeler: vertex, midpoint, edge, face, then the
-ground plane. Arrow keys lock the result to an axis or to a parallel edge.
+Pipeline: ray → plane hit → geometric candidates (screen-space priority) →
+axis / parallel locks → Snap with guide segments for the preview renderer.
 """
+
+from __future__ import annotations
 
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
@@ -15,16 +17,52 @@ from bpy_extras import view3d_utils
 
 import geom
 
-VERTEX_PX = 12.0
-EDGE_PX = 8.0
+VERTEX_PX = 14.0
+EDGE_PX = 10.0
+ALIGN_PX = 8.0
+
+
+class WorkingPlane:
+    """Active drawing plane: point + normal (model / local space)."""
+
+    __slots__ = ("origin", "normal", "source")
+
+    def __init__(self, origin, normal, source="ground"):
+        self.origin = Vector(origin)
+        n = Vector(normal)
+        self.normal = n.normalized() if n.length > 1e-8 else Vector((0.0, 0.0, 1.0))
+        self.source = source  # "face" | "ground" | "inferred" | "locked"
+
+    def copy(self):
+        return WorkingPlane(self.origin, self.normal, self.source)
 
 
 class Snap:
-    def __init__(self, co, kind, normal, tangent=None):
+    __slots__ = ("co", "kind", "normal", "tangent", "label", "guides", "plane")
+
+    def __init__(self, co, kind, normal, tangent=None, label="", guides=None, plane=None):
         self.co = Vector(co)
         self.kind = kind
         self.normal = Vector(normal) if normal is not None else Vector((0.0, 0.0, 1.0))
         self.tangent = None if tangent is None else Vector(tangent)
+        self.label = label or _default_label(kind)
+        self.guides = list(guides or [])  # [[Vector, Vector], ...] world/local segments
+        self.plane = plane
+
+
+def _default_label(kind):
+    return {
+        "vertex": "Endpoint",
+        "midpoint": "Midpoint",
+        "edge": "On Edge",
+        "face": "On Face",
+        "plane": "On Plane",
+        "axis": "Axis",
+        "parallel": "Parallel",
+        "perpendicular": "Perpendicular",
+        "intersection": "Intersection",
+        "from_point": "From Point",
+    }.get(kind, kind.replace("_", " ").title())
 
 
 def _screen(context, co):
@@ -39,95 +77,78 @@ def _ray(context, mouse):
     return origin, direction
 
 
-def _ground(origin, direction):
-    if abs(direction.z) < 1e-8:
+def ray_plane_intersect(origin, direction, plane: WorkingPlane):
+    """R(t)=O+tD ∩ plane (P0, n). Returns point or None."""
+    denom = plane.normal.dot(direction)
+    if abs(denom) < 1e-8:
         return None
-    t = -origin.z / direction.z
+    t = plane.normal.dot(plane.origin - origin) / denom
     if t < 0.0:
         return None
     return origin + direction * t
 
 
-def infer(context, bm, mouse, axis=None, parallel=None, anchor=None):
-    """Return a Snap for the mouse position."""
-    origin, direction = _ray(context, mouse)
-    geom._ensure(bm)
-    best = None
-    best_px = VERTEX_PX
+def plane_from_face(face):
+    return WorkingPlane(face.calc_center_median(), face.normal, "face")
 
-    for vert in bm.verts:
-        screen = _screen(context, vert.co)
-        if screen is None:
-            continue
-        dist = (screen - Vector(mouse)).length
-        if dist <= best_px:
-            best_px = dist
-            best = Snap(vert.co, "vertex", Vector((0.0, 0.0, 1.0)))
 
-    if best is None or best.kind != "vertex":
-        for edge in bm.edges:
-            mid = (edge.verts[0].co + edge.verts[1].co) * 0.5
-            screen = _screen(context, mid)
-            if screen is None:
-                continue
-            dist = (screen - Vector(mouse)).length
-            if dist <= VERTEX_PX and (best is None or dist < best_px):
-                best_px = dist
-                tangent = edge.verts[1].co - edge.verts[0].co
-                best = Snap(mid, "midpoint", Vector((0.0, 0.0, 1.0)), tangent)
+def ground_plane(z=0.0):
+    return WorkingPlane(Vector((0.0, 0.0, z)), Vector((0.0, 0.0, 1.0)), "ground")
 
-    if best is None:
-        for edge in bm.edges:
-            a = _screen(context, edge.verts[0].co)
-            b = _screen(context, edge.verts[1].co)
-            if a is None or b is None:
-                continue
-            ab = b - a
-            length_sq = ab.length_squared
-            if length_sq < 1e-8:
-                continue
-            t = (Vector(mouse) - a).dot(ab) / length_sq
-            if t < 0.0 or t > 1.0:
-                continue
-            closest = a + ab * t
-            dist = (closest - Vector(mouse)).length
-            if dist <= EDGE_PX:
-                tangent = edge.verts[1].co - edge.verts[0].co
-                co = edge.verts[0].co.lerp(edge.verts[1].co, t)
-                best = Snap(co, "edge", Vector((0.0, 0.0, 1.0)), tangent)
+
+def establish_plane(bm, snap, fallback=None):
+    """Choose a working plane from the first click snap."""
+    if snap is None:
+        return fallback or ground_plane()
+    if snap.kind == "face" and snap.normal.length > 1e-8:
+        return WorkingPlane(snap.co, snap.normal, "face")
+    if snap.plane is not None and snap.kind in {"plane", "face"}:
+        return snap.plane.copy()
+    if snap.kind in {"vertex", "midpoint", "edge"} and bm is not None:
+        # Prefer a connected face so drawing on a vertical wall stays on that wall.
+        best = None
+        for face in bm.faces:
+            for vert in face.verts:
+                if (vert.co - snap.co).length < 1e-5:
+                    best = face
+                    break
+            if best is not None:
                 break
+            for edge in face.edges:
+                a, b = edge.verts[0].co, edge.verts[1].co
+                ab = b - a
+                length_sq = ab.length_squared
+                if length_sq < 1e-12:
+                    continue
+                t = (snap.co - a).dot(ab) / length_sq
+                if 0.0 <= t <= 1.0 and (a + ab * t - snap.co).length < 1e-4:
+                    best = face
+                    break
+            if best is not None:
+                break
+        if best is not None and best.normal.length > 1e-8:
+            return WorkingPlane(snap.co, best.normal, "face")
+        base = fallback or ground_plane()
+        return WorkingPlane(snap.co, base.normal, "inferred")
+    if snap.kind == "plane":
+        return WorkingPlane(snap.co, snap.normal, "plane")
+    return fallback or ground_plane()
 
-    if best is None and len(bm.faces):
-        tree = BVHTree.FromBMesh(bm, epsilon=0.0)
-        hit, normal, _index, _dist = tree.ray_cast(origin, direction, 10000.0)
-        if hit is not None:
-            best = Snap(hit, "face", normal)
 
-    if best is None:
-        ground = _ground(origin, direction)
-        if ground is None:
-            ground = origin + direction * 10.0
-            ground.z = 0.0
-        best = Snap(ground, "plane", Vector((0.0, 0.0, 1.0)))
-
-    best.co = constrain(origin, direction, best.co, axis, parallel, anchor)
-    if axis in {"X", "Y", "Z"}:
-        best.kind = "axis"
-    elif axis == "PARALLEL":
-        best.kind = "parallel"
-    return best
+def _axis_vector(axis):
+    return {
+        "X": Vector((1.0, 0.0, 0.0)),
+        "Y": Vector((0.0, 1.0, 0.0)),
+        "Z": Vector((0.0, 0.0, 1.0)),
+    }.get(axis)
 
 
 def constrain(origin, direction, co, axis, parallel, anchor):
     if anchor is None or axis is None:
         return Vector(co)
     anchor = Vector(anchor)
-    if axis == "X":
-        direction_axis = Vector((1.0, 0.0, 0.0))
-    elif axis == "Y":
-        direction_axis = Vector((0.0, 1.0, 0.0))
-    elif axis == "Z":
-        direction_axis = Vector((0.0, 0.0, 1.0))
+    if axis in {"X", "Y", "Z"}:
+        direction_axis = _axis_vector(axis)
     elif axis == "PARALLEL" and parallel is not None and parallel.length > 1e-8:
         direction_axis = Vector(parallel).normalized()
     else:
@@ -136,7 +157,7 @@ def constrain(origin, direction, co, axis, parallel, anchor):
         anchor,
         anchor + direction_axis,
         origin,
-        origin + direction * 1000.0,
+        origin + direction * 10000.0,
     )
     if hits is None or hits[0] is None:
         locked = Vector(co)
@@ -160,3 +181,161 @@ def axis_label(axis):
         "Z": "On Blue Axis",
         "PARALLEL": "Parallel to Edge",
     }.get(axis, "")
+
+
+def infer(
+    context,
+    bm,
+    mouse,
+    axis=None,
+    parallel=None,
+    anchor=None,
+    plane: WorkingPlane | None = None,
+):
+    """Resolve cursor → Snap with optional working-plane preference."""
+    origin, direction = _ray(context, mouse)
+    geom._ensure(bm)
+    mouse_v = Vector(mouse)
+    active_plane = plane or ground_plane()
+
+    candidates = []
+
+    # --- Point snaps (screen-space) ---
+    for vert in bm.verts:
+        screen = _screen(context, vert.co)
+        if screen is None:
+            continue
+        dist = (screen - mouse_v).length
+        if dist <= VERTEX_PX:
+            candidates.append((dist, 0, Snap(vert.co, "vertex", active_plane.normal)))
+
+    for edge in bm.edges:
+        a_co = edge.verts[0].co
+        b_co = edge.verts[1].co
+        mid = (a_co + b_co) * 0.5
+        screen = _screen(context, mid)
+        if screen is not None:
+            dist = (screen - mouse_v).length
+            if dist <= VERTEX_PX:
+                tangent = b_co - a_co
+                candidates.append(
+                    (dist, 1, Snap(mid, "midpoint", active_plane.normal, tangent))
+                )
+        a = _screen(context, a_co)
+        b = _screen(context, b_co)
+        if a is None or b is None:
+            continue
+        ab = b - a
+        length_sq = ab.length_squared
+        if length_sq < 1e-8:
+            continue
+        t = (mouse_v - a).dot(ab) / length_sq
+        if 0.0 <= t <= 1.0:
+            closest = a + ab * t
+            dist = (closest - mouse_v).length
+            if dist <= EDGE_PX:
+                co = a_co.lerp(b_co, t)
+                tangent = b_co - a_co
+                candidates.append(
+                    (dist, 2, Snap(co, "edge", active_plane.normal, tangent))
+                )
+
+    # From-point / square / alignment when an anchor exists
+    if anchor is not None:
+        for other in bm.verts:
+            # Align X/Y/Z with anchor (from point)
+            for axis_name, vec in (("X", Vector((1, 0, 0))), ("Y", Vector((0, 1, 0))), ("Z", Vector((0, 0, 1)))):
+                projected = Vector(anchor)
+                if axis_name == "X":
+                    projected.x = other.co.x
+                elif axis_name == "Y":
+                    projected.y = other.co.y
+                else:
+                    projected.z = other.co.z
+                screen = _screen(context, projected)
+                if screen is None:
+                    continue
+                dist = (screen - mouse_v).length
+                if dist <= ALIGN_PX:
+                    guides = [[Vector(anchor), projected]]
+                    candidates.append(
+                        (
+                            dist,
+                            3,
+                            Snap(
+                                projected,
+                                "from_point",
+                                active_plane.normal,
+                                vec,
+                                label="From Point",
+                                guides=guides,
+                            ),
+                        )
+                    )
+
+    # Face hit (BVH) — also seeds plane when none locked
+    face_hit = None
+    if len(bm.faces):
+        tree = BVHTree.FromBMesh(bm, epsilon=0.0)
+        hit, normal, index, _dist = tree.ray_cast(origin, direction, 10000.0)
+        if hit is not None:
+            face_hit = Snap(hit, "face", normal)
+            screen = _screen(context, hit)
+            dist = (screen - mouse_v).length if screen is not None else 50.0
+            candidates.append((dist, 4, face_hit))
+
+    # Preferred plane intersection (not forced to ground)
+    plane_pt = ray_plane_intersect(origin, direction, active_plane)
+    if plane_pt is not None:
+        screen = _screen(context, plane_pt)
+        dist = (screen - mouse_v).length if screen is not None else 80.0
+        candidates.append(
+            (
+                dist,
+                5,
+                Snap(plane_pt, "plane", active_plane.normal, plane=active_plane),
+            )
+        )
+    elif face_hit is None:
+        # Degenerate: fall back along ray onto Z=0
+        ground = ray_plane_intersect(origin, direction, ground_plane())
+        if ground is None:
+            ground = origin + direction * 10.0
+            ground.z = 0.0
+        candidates.append((999.0, 6, Snap(ground, "plane", Vector((0.0, 0.0, 1.0)))))
+
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    best = candidates[0][2] if candidates else Snap(Vector((0, 0, 0)), "plane", Vector((0, 0, 1)))
+
+    # Axis / parallel lock after pick
+    locked = constrain(origin, direction, best.co, axis, parallel, anchor)
+    best.co = locked
+    if axis in {"X", "Y", "Z"}:
+        best.kind = "axis"
+        best.label = axis_label(axis)
+        if anchor is not None:
+            best.guides = [[Vector(anchor), Vector(best.co)]]
+    elif axis == "PARALLEL":
+        best.kind = "parallel"
+        best.label = axis_label(axis)
+        if anchor is not None:
+            best.guides = [[Vector(anchor), Vector(best.co)]]
+
+    # Inference guides from anchor along axes when unlocked and close
+    if anchor is not None and axis is None and best.kind in {"plane", "face", "edge", "from_point"}:
+        delta = best.co - Vector(anchor)
+        guides = list(best.guides)
+        for name, unit, color_kind in (
+            ("X", Vector((1, 0, 0)), "axis_x"),
+            ("Y", Vector((0, 1, 0)), "axis_y"),
+            ("Z", Vector((0, 0, 1)), "axis_z"),
+        ):
+            if abs(delta.dot(unit)) > 1e-6 and delta.cross(unit).length < 1e-3 * max(delta.length, 1e-6):
+                best.kind = "axis"
+                best.label = axis_label(name)
+                guides.append([Vector(anchor), Vector(best.co)])
+                break
+        best.guides = guides
+
+    best.plane = active_plane
+    return best

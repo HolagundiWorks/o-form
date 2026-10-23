@@ -7,6 +7,7 @@
 import math
 import os
 import sys
+import time
 
 import bmesh
 import bpy
@@ -19,17 +20,26 @@ from bpy.props import (
     StringProperty,
 )
 from bpy.types import Operator
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 import geom
+import groups
 import inference
+import selection
+import solids
 
-preview_points = []
+preview_strokes = []  # list of polylines in model/local space
+preview_guides = []  # inference guide segments [[a, b], ...]
+preview_label = ""
+preview_label_pos = None  # region 2D (x, y) for POST_PIXEL snap tip
+_PREVIEW_HANDLE = None
+_LABEL_HANDLE = None
 
+# SketchUp-aligned defaults: https://help.sketchup.com/en/default-keyboard-shortcuts
 TOOL_KEYS = {
     "SPACE": "tool_select",
     "E": "tool_eraser",
@@ -43,9 +53,21 @@ TOOL_KEYS = {
     "M": "tool_move",
     "Q": "tool_rotate",
     "S": "tool_scale",
+    "T": "tool_tape",
+    "N": "tool_polygon",
+    "J": "tool_follow_me",
+    "X": "tool_protractor",
+    "K": "tool_back_edges",
+    "G": "make_component",
     "O": "tool_orbit",
     "H": "tool_pan",
     "Z": "tool_zoom",
+}
+
+# Shift+letter tools (Shift+Z remains Zoom Extents).
+SHIFT_TOOL_KEYS = {
+    "L": "tool_freehand",
+    "Z": "tool_zoom_extents",
 }
 
 ARROWS = {
@@ -68,8 +90,150 @@ COLORS = (
 
 
 def set_preview(points):
-    global preview_points
-    preview_points = [Vector(p) for p in points]
+    """Rubber-band polyline in model space (drawn live while a tool is active)."""
+    global preview_strokes
+    if not points:
+        preview_strokes = []
+    else:
+        preview_strokes = [[Vector(p) for p in points]]
+    _tag_preview_redraw()
+
+
+def set_preview_strokes(strokes):
+    """Several rubber-band polylines (e.g. Push/Pull top + verticals)."""
+    global preview_strokes
+    preview_strokes = [[Vector(p) for p in stroke] for stroke in strokes if stroke]
+    _tag_preview_redraw()
+
+
+def set_inference_feedback(snap):
+    """Store snap label + guide lines for the viewport overlay."""
+    global preview_guides, preview_label, preview_label_pos
+    if snap is None:
+        preview_guides = []
+        preview_label = ""
+        preview_label_pos = None
+    else:
+        preview_guides = [[Vector(a), Vector(b)] for a, b in (snap.guides or [])]
+        preview_label = snap.label or ""
+        preview_label_pos = None
+        if getattr(snap, "co", None) is not None:
+            try:
+                screen = inference._screen(bpy.context, snap.co)
+                if screen is not None:
+                    preview_label_pos = (float(screen.x) + 14.0, float(screen.y) + 14.0)
+            except Exception:
+                preview_label_pos = None
+    _tag_preview_redraw()
+
+
+def _tag_preview_redraw():
+    screen = getattr(bpy.context, "screen", None)
+    if screen is None:
+        return
+    for area in screen.areas:
+        if area.type == "VIEW_3D":
+            area.tag_redraw()
+
+
+def _preview_world_strokes():
+    """Transform preview strokes from the edit-context object into world space."""
+    if not preview_strokes:
+        return []
+    obj = groups.context_object(bpy.context)
+    mat = obj.matrix_world if obj is not None else None
+    out = []
+    for stroke in preview_strokes:
+        if mat is None:
+            out.append([tuple(p) for p in stroke])
+        else:
+            out.append([tuple(mat @ p) for p in stroke])
+    return out
+
+
+def _world_seg(seg):
+    obj = groups.context_object(bpy.context)
+    mat = obj.matrix_world if obj is not None else None
+    if mat is None:
+        return [tuple(seg[0]), tuple(seg[1])]
+    return [tuple(mat @ seg[0]), tuple(mat @ seg[1])]
+
+
+def _draw_tool_preview():
+    """POST_VIEW: live geometry preview + inference guides."""
+    strokes = _preview_world_strokes()
+    try:
+        import gpu
+        from gpu_extras.batch import batch_for_shader
+    except ImportError:
+        return
+    shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+    gpu.state.depth_test_set("NONE")
+    gpu.state.blend_set("ALPHA")
+    gpu.state.line_width_set(2.0)
+    shader.bind()
+    markers = []
+    if strokes:
+        # SketchUp-like inference green on the rubber band.
+        shader.uniform_float("color", (0.15, 0.72, 0.35, 0.95))
+        for coords in strokes:
+            if len(coords) < 2:
+                continue
+            batch_for_shader(shader, "LINE_STRIP", {"pos": coords}).draw(shader)
+            markers.append(coords[0])
+            markers.append(coords[-1])
+    # Inference guides (axis / from-point) — RGB like SketchUp axes.
+    for seg in preview_guides:
+        if len(seg) < 2:
+            continue
+        a, b = _world_seg(seg)
+        delta = Vector(b) - Vector(a)
+        if abs(delta.x) >= abs(delta.y) and abs(delta.x) >= abs(delta.z):
+            color = (0.9, 0.15, 0.15, 0.9)
+        elif abs(delta.y) >= abs(delta.z):
+            color = (0.15, 0.75, 0.2, 0.9)
+        else:
+            color = (0.2, 0.35, 0.95, 0.9)
+        shader.uniform_float("color", color)
+        batch_for_shader(shader, "LINES", {"pos": [a, b]}).draw(shader)
+    if markers:
+        if hasattr(gpu.state, "point_size_set"):
+            gpu.state.point_size_set(7.0)
+        shader.uniform_float("color", (0.95, 0.35, 0.12, 1.0))
+        batch_for_shader(shader, "POINTS", {"pos": markers}).draw(shader)
+        if hasattr(gpu.state, "point_size_set"):
+            gpu.state.point_size_set(1.0)
+    gpu.state.line_width_set(1.0)
+    gpu.state.blend_set("NONE")
+    gpu.state.depth_test_set("LESS_EQUAL")
+
+
+def _draw_snap_label():
+    """POST_PIXEL: SketchUp-style snap tip next to the inferred point."""
+    if not preview_label:
+        return
+    try:
+        import blf
+    except ImportError:
+        return
+    context = bpy.context
+    if context.area is None or context.area.type != "VIEW_3D":
+        return
+    region = context.region
+    if region is None or region.type != "WINDOW":
+        return
+    x, y = preview_label_pos if preview_label_pos is not None else (24.0, region.height - 36.0)
+    x = max(8.0, min(x, region.width - 120.0))
+    y = max(8.0, min(y, region.height - 20.0))
+    font_id = 0
+    blf.size(font_id, 12)
+    # Soft shadow for contrast on both light and dark paper.
+    blf.color(font_id, 0.0, 0.0, 0.0, 0.55)
+    blf.position(font_id, x + 1.0, y - 1.0, 0)
+    blf.draw(font_id, preview_label[:40])
+    blf.color(font_id, 0.12, 0.55, 0.28, 1.0)
+    blf.position(font_id, x, y, 0)
+    blf.draw(font_id, preview_label[:40])
 
 
 def _prop(scene, name, value=None):
@@ -105,21 +269,10 @@ def _redraw(context):
 
 
 def _ensure_model(context):
-    scene = context.scene
-    obj = scene.objects.get("Model")
-    if obj is None or obj.type != "MESH":
-        mesh = bpy.data.meshes.new("Model")
-        obj = bpy.data.objects.new("Model", mesh)
-        scene.collection.objects.link(obj)
-    view_layer = context.view_layer
-    for other in list(view_layer.objects):
-        if other is None:
-            continue
-        other.select_set(other == obj)
-    view_layer.objects.active = obj
-    if obj.mode != "EDIT":
-        bpy.ops.object.mode_set(mode="EDIT")
-    context.tool_settings.mesh_select_mode = (True, True, True)
+    """Ensure the root Model exists and activate the current edit context."""
+    groups.ensure_root(context)
+    obj = groups.context_object(context)
+    groups.set_context(context, obj)
     return obj
 
 
@@ -168,11 +321,18 @@ def _view3d(context):
 def _later(tool_name):
     def run():
         op = getattr(bpy.ops.oform, tool_name, None)
-        if op is not None:
-            try:
+        if op is None:
+            return None
+        context = bpy.context
+        override = _view3d(context)
+        try:
+            if override is not None:
+                with context.temp_override(**override):
+                    op("INVOKE_DEFAULT")
+            else:
                 op("INVOKE_DEFAULT")
-            except RuntimeError:
-                pass
+        except RuntimeError:
+            pass
         return None
 
     bpy.app.timers.register(run, first_interval=0.01)
@@ -188,14 +348,33 @@ class _Tool:
         self._buf = ""
         self._anchor = None
         self._points = []
+        self._plane = None  # inference.WorkingPlane after first click on a face
+        self._last_snap = None
         _status(context, status)
         _measure(context, "")
         set_preview([])
+        set_inference_feedback(None)
         # mode_set has to finish before the modal handler exists. Calling it
         # from a modal event runs inside the handler and skips the undo step.
         _edit(context)
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
+
+    def _adopt_plane(self, snap, bm=None):
+        """Lock the working plane from the first drawing point (SketchUp-style)."""
+        if self._plane is None and snap is not None:
+            self._plane = inference.establish_plane(bm, snap, inference.ground_plane())
+
+    def _start(self, context, status):
+        """Begin a modal tool in the 3D view (sidebar / keymap safe)."""
+        if context.area is not None and context.area.type == "VIEW_3D":
+            return self._arm(context, status)
+        override = _view3d(context)
+        if override is None:
+            self.report({"WARNING"}, "No 3D View to draw in")
+            return {"CANCELLED"}
+        with context.temp_override(**override):
+            return self._arm(context, status)
 
     def _event(self, context, event):
         # Orbit, pan, and zoom stay on the middle mouse and the wheel.
@@ -212,21 +391,58 @@ class _Tool:
             return {"PASS_THROUGH"}
         if event.ctrl and not event.alt and event.type in {"Z", "S"} and event.value == "PRESS":
             return {"PASS_THROUGH"}
+        if event.ctrl and not event.alt and not event.shift and event.type == "G" and event.value == "PRESS":
+            try:
+                bpy.ops.oform.make_group()
+            except RuntimeError:
+                pass
+            return {"RUNNING_MODAL"}
         if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
-            self._points.clear()
+            had_state = (
+                bool(getattr(self, "_points", None))
+                or self._anchor is not None
+                or bool(self._buf)
+                or getattr(self, "_plane", None) is not None
+            )
+            if getattr(self, "_points", None) is not None:
+                self._points.clear()
             self._anchor = None
             self._buf = ""
+            self._plane = None
             set_preview([])
+            set_inference_feedback(None)
             _measure(context, "")
+            if not had_state:
+                if groups.get_entity(context) is not None:
+                    groups.set_entity(context, None)
+                    _status(context, "Selection cleared")
+                    return {"RUNNING_MODAL"}
+                if groups.context_depth(context) > 0:
+                    groups.pop_context(context)
+                    _status(context, "Closed " + groups.context_object(context).name)
+                    return {"RUNNING_MODAL"}
             _status(context, self._idle_status())
             return {"RUNNING_MODAL"}
         if event.value == "PRESS" and not event.ctrl and not event.alt:
-            if event.type == "Z" and event.shift:
-                _later("tool_zoom_extents")
-                set_preview([])
-                return {"FINISHED"}
+            if event.shift:
+                name = SHIFT_TOOL_KEYS.get(event.type)
+                if name:
+                    if "oform." + name != self.bl_idname:
+                        _later(name)
+                        set_preview([])
+                        return {"FINISHED"}
+                    return {"RUNNING_MODAL"}
             name = TOOL_KEYS.get(event.type)
             if name and not event.shift:
+                # Non-modal group commands run immediately.
+                if name in {"make_component", "make_group", "explode", "enter_group", "exit_group"}:
+                    op = getattr(bpy.ops.oform, name, None)
+                    if op is not None:
+                        try:
+                            op()
+                        except RuntimeError:
+                            pass
+                    return {"RUNNING_MODAL"}
                 if "oform." + name != self.bl_idname:
                     _later(name)
                     set_preview([])
@@ -246,11 +462,44 @@ class _Tool:
             self._buf = self._buf[:-1]
             _measure(context, self._buf)
             return {"RUNNING_MODAL"}
+        if event.value == "PRESS" and event.type in {"DEL", "DELETE"}:
+            # While typing a length, Del edits the buffer; otherwise delete selection.
+            if self._buf:
+                self._buf = self._buf[:-1]
+                _measure(context, self._buf)
+                return {"RUNNING_MODAL"}
+            had_draw = bool(getattr(self, "_points", None)) or self._anchor is not None
+            if had_draw:
+                if getattr(self, "_points", None) is not None:
+                    self._points.clear()
+                self._anchor = None
+                self._plane = None
+                set_preview([])
+                set_inference_feedback(None)
+                _measure(context, "")
+                _status(context, self._idle_status())
+                return {"RUNNING_MODAL"}
+            try:
+                _do(bpy.ops.oform.delete_selection)
+            except RuntimeError:
+                pass
+            return {"RUNNING_MODAL"}
         if event.value == "PRESS" and event.unicode and event.unicode in "0123456789.,-sSmMcC ":
             self._buf += event.unicode
             _measure(context, self._buf)
             return {"RUNNING_MODAL"}
         if event.value == "PRESS" and event.type in {"RET", "NUMPAD_ENTER"}:
+            # O-Draft slash transfer: "/…" on the CAD line goes to Ask.
+            if self._buf.strip().startswith("/"):
+                import ai as ask
+
+                text = self._buf.strip()[1:].strip() or self._buf.strip()
+                context.scene.oform_ask = text
+                ask.propose(context, text)
+                self._buf = ""
+                _measure(context, "")
+                _status(context, context.scene.get("oform_status", "Ask"))
+                return {"RUNNING_MODAL"}
             return {"APPLY"}
         return None
 
@@ -346,11 +595,134 @@ class OFORM_OT_push_pull(Operator):
 
     distance: FloatProperty(default=0.0)
     face_index: IntProperty(default=-1)
+    copy: BoolProperty(default=False)
 
     def execute(self, context):
         _obj, bm = _edit(context)
         face = geom.selected_face(bm, self.face_index)
-        geom.push_pull(bm, face, self.distance)
+        geom.push_pull(bm, face, self.distance, copy=self.copy)
+        _commit(_obj)
+        return {"FINISHED"}
+
+
+class OFORM_OT_polygon(Operator):
+    bl_idname = "oform.polygon"
+    bl_label = "Polygon"
+    bl_options = {"UNDO"}
+
+    center: FloatVectorProperty(size=3)
+    radius: FloatProperty(default=1.0)
+    normal: FloatVectorProperty(size=3, default=(0.0, 0.0, 1.0))
+    sides: IntProperty(default=6, min=3, max=256)
+
+    def execute(self, context):
+        if self.radius <= 1e-8:
+            return {"CANCELLED"}
+        _obj, bm = _edit(context)
+        pts = geom.polygon_points(self.center, self.radius, self.normal, self.sides)
+        geom.add_polygon(bm, pts)
+        _commit(_obj)
+        return {"FINISHED"}
+
+
+_FREEHAND_BUF = []
+_FOLLOW_PATH = []
+
+
+class OFORM_OT_freehand(Operator):
+    bl_idname = "oform.freehand"
+    bl_label = "Freehand"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        pts = geom.freehand_points(_FREEHAND_BUF)
+        if len(pts) < 2:
+            return {"CANCELLED"}
+        _obj, bm = _edit(context)
+        geom.add_polyline(bm, pts, close=False)
+        _commit(_obj)
+        return {"FINISHED"}
+
+
+class OFORM_OT_tape(Operator):
+    bl_idname = "oform.tape"
+    bl_label = "Tape Measure"
+    bl_options = {"UNDO"}
+
+    a: FloatVectorProperty(size=3)
+    b: FloatVectorProperty(size=3)
+    create_guide: BoolProperty(default=False)
+
+    def execute(self, context):
+        _obj, bm = _edit(context)
+        if self.create_guide:
+            geom.add_guide(bm, self.a, self.b)
+            _commit(_obj)
+        length = (Vector(self.b) - Vector(self.a)).length
+        _measure(context, "{:.4f}".format(length))
+        _status(context, "Distance {:.4f}".format(length))
+        return {"FINISHED"}
+
+
+class OFORM_OT_follow_me(Operator):
+    bl_idname = "oform.follow_me"
+    bl_label = "Follow Me"
+    bl_options = {"UNDO"}
+
+    face_index: IntProperty(default=-1)
+
+    def execute(self, context):
+        _obj, bm = _edit(context)
+        face = geom.selected_face(bm, self.face_index)
+        path = list(_FOLLOW_PATH)
+        if not path:
+            path = geom.ordered_path_coords([edge for edge in bm.edges if edge.select])
+        if face is None or len(path) < 2:
+            self.report({"WARNING"}, "Select a path of edges, then a profile face")
+            return {"CANCELLED"}
+        geom.follow_me(bm, face, path)
+        _commit(_obj)
+        return {"FINISHED"}
+
+
+class OFORM_OT_soften(Operator):
+    bl_idname = "oform.soften"
+    bl_label = "Soften Edges"
+    bl_options = {"UNDO"}
+
+    edge_index: IntProperty(default=-1)
+    smooth: BoolProperty(default=True)
+
+    def execute(self, context):
+        _obj, bm = _edit(context)
+        bm.edges.ensure_lookup_table()
+        edges = []
+        if 0 <= self.edge_index < len(bm.edges):
+            edges.append(bm.edges[self.edge_index])
+        else:
+            edges = [edge for edge in bm.edges if edge.select]
+        geom.soften_edges(bm, edges, smooth=self.smooth)
+        _commit(_obj)
+        return {"FINISHED"}
+
+
+class OFORM_OT_hide_edges(Operator):
+    bl_idname = "oform.hide_edges"
+    bl_label = "Hide Edges"
+    bl_options = {"UNDO"}
+
+    edge_index: IntProperty(default=-1)
+    hide: BoolProperty(default=True)
+
+    def execute(self, context):
+        _obj, bm = _edit(context)
+        bm.edges.ensure_lookup_table()
+        edges = []
+        if 0 <= self.edge_index < len(bm.edges):
+            edges.append(bm.edges[self.edge_index])
+        else:
+            edges = [edge for edge in bm.edges if edge.select]
+        geom.hide_edges(bm, edges, hide=self.hide)
         _commit(_obj)
         return {"FINISHED"}
 
@@ -391,6 +763,54 @@ class OFORM_OT_erase(Operator):
         return {"FINISHED"}
 
 
+class OFORM_OT_delete_selection(Operator):
+    bl_idname = "oform.delete_selection"
+    bl_label = "Delete"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        entity = groups.get_entity(context)
+        if entity is not None and groups.is_container(entity):
+            name = entity.name
+            # Never delete the root Model workspace object via Delete.
+            root = groups.ensure_root(context)
+            if entity == root:
+                self.report({"WARNING"}, "Cannot delete the root Model")
+                return {"CANCELLED"}
+            groups.set_entity(context, None)
+            try:
+                bpy.data.objects.remove(entity, do_unlink=True)
+            except ReferenceError:
+                return {"CANCELLED"}
+            _status(context, "Deleted " + name)
+            return {"FINISHED"}
+
+        # Selected mesh objects other than the active edit context.
+        selected = [
+            obj
+            for obj in context.selected_objects
+            if obj.type == "MESH" and obj != groups.context_object(context)
+        ]
+        if selected and context.mode == "OBJECT":
+            for obj in selected:
+                if groups.is_container(obj) or obj.name != "Model":
+                    try:
+                        bpy.data.objects.remove(obj, do_unlink=True)
+                    except ReferenceError:
+                        pass
+            groups.set_entity(context, None)
+            _status(context, "Deleted selection")
+            return {"FINISHED"}
+
+        obj, bm = _edit(context)
+        if geom.delete_selected(bm):
+            _commit(obj)
+            _status(context, "Deleted")
+            return {"FINISHED"}
+        self.report({"INFO"}, "Nothing selected to delete")
+        return {"CANCELLED"}
+
+
 class OFORM_OT_move(Operator):
     bl_idname = "oform.move"
     bl_label = "Move"
@@ -400,6 +820,29 @@ class OFORM_OT_move(Operator):
     copy: BoolProperty(default=False)
 
     def execute(self, context):
+        entity = groups.get_entity(context)
+        if entity is not None:
+            delta = Vector(self.delta)
+            if self.copy:
+                if groups.kind_of(entity) == groups.KIND_COMPONENT:
+                    inst = groups.instance_component(context, entity)
+                    if inst is None:
+                        return {"CANCELLED"}
+                    inst.matrix_world.translation = entity.matrix_world.translation + delta
+                    groups.set_entity(context, inst)
+                else:
+                    bpy.ops.object.mode_set(mode="OBJECT")
+                    clone = entity.copy()
+                    clone.data = entity.data.copy()
+                    context.scene.collection.objects.link(clone)
+                    groups._tag(clone, groups.KIND_GROUP)
+                    clone.matrix_world = entity.matrix_world.copy()
+                    clone.matrix_world.translation = entity.matrix_world.translation + delta
+                    groups.set_entity(context, clone)
+                    groups.set_context(context, groups.context_object(context))
+            else:
+                entity.matrix_world.translation = entity.matrix_world.translation + delta
+            return {"FINISHED"}
         _obj, bm = _edit(context)
         if self.copy:
             geom.duplicate_selected(bm)
@@ -419,6 +862,19 @@ class OFORM_OT_rotate(Operator):
     angle: FloatProperty(default=0.0, subtype="ANGLE")
 
     def execute(self, context):
+        entity = groups.get_entity(context)
+        if entity is not None:
+            center = Vector(self.center)
+            axis = Vector(self.axis)
+            if axis.length < 1e-8:
+                axis = Vector((0.0, 0.0, 1.0))
+            rot = (
+                Matrix.Translation(center)
+                @ Matrix.Rotation(self.angle, 4, axis.normalized())
+                @ Matrix.Translation(-center)
+            )
+            entity.matrix_world = rot @ entity.matrix_world
+            return {"FINISHED"}
         _obj, bm = _edit(context)
         geom.rotate_verts(geom.selected_verts(bm), self.center, self.axis, self.angle)
         geom._ensure(bm)
@@ -436,6 +892,24 @@ class OFORM_OT_scale(Operator):
     axis_name: StringProperty(default="")
 
     def execute(self, context):
+        entity = groups.get_entity(context)
+        if entity is not None:
+            center = Vector(self.center)
+            factor = self.factor
+            scale_vec = Vector((factor, factor, factor))
+            if self.axis_name == "X":
+                scale_vec = Vector((factor, 1.0, 1.0))
+            elif self.axis_name == "Y":
+                scale_vec = Vector((1.0, factor, 1.0))
+            elif self.axis_name == "Z":
+                scale_vec = Vector((1.0, 1.0, factor))
+            scl = (
+                Matrix.Translation(center)
+                @ Matrix.Diagonal(scale_vec.to_4d())
+                @ Matrix.Translation(-center)
+            )
+            entity.matrix_world = scl @ entity.matrix_world
+            return {"FINISHED"}
         _obj, bm = _edit(context)
         axis = self.axis_name or None
         geom.scale_verts(geom.selected_verts(bm), self.center, self.factor, axis)
@@ -460,20 +934,239 @@ class OFORM_OT_paint(Operator):
         return {"FINISHED"}
 
 
+class OFORM_OT_make_group(Operator):
+    bl_idname = "oform.make_group"
+    bl_label = "Make Group"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        obj = groups.make_group(context)
+        if obj is None:
+            self.report({"WARNING"}, "Select geometry first")
+            return {"CANCELLED"}
+        _status(context, "Created group " + obj.name)
+        return {"FINISHED"}
+
+
+class OFORM_OT_make_component(Operator):
+    bl_idname = "oform.make_component"
+    bl_label = "Make Component"
+    bl_options = {"UNDO"}
+
+    definition: StringProperty(default="Component")
+
+    def execute(self, context):
+        obj = groups.make_component(context, self.definition)
+        if obj is None:
+            self.report({"WARNING"}, "Select geometry first")
+            return {"CANCELLED"}
+        _status(context, "Created component " + obj.name)
+        return {"FINISHED"}
+
+
+class OFORM_OT_explode(Operator):
+    bl_idname = "oform.explode"
+    bl_label = "Explode"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        entity = groups.get_entity(context)
+        if entity is None:
+            active = context.view_layer.objects.active
+            if groups.is_container(active):
+                entity = active
+        if entity is None:
+            self.report({"WARNING"}, "Select a group or component")
+            return {"CANCELLED"}
+        name = entity.name
+        if not groups.explode(context, entity):
+            return {"CANCELLED"}
+        _status(context, "Exploded " + name)
+        return {"FINISHED"}
+
+
+class OFORM_OT_enter_group(Operator):
+    bl_idname = "oform.enter_group"
+    bl_label = "Edit Group/Component"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        entity = groups.get_entity(context)
+        if entity is None:
+            self.report({"WARNING"}, "Select a group or component")
+            return {"CANCELLED"}
+        groups.set_entity(context, None)
+        groups.push_context(context, entity)
+        _status(context, "Editing " + entity.name)
+        return {"FINISHED"}
+
+
+class OFORM_OT_exit_group(Operator):
+    bl_idname = "oform.exit_group"
+    bl_label = "Close Group/Component"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        if groups.context_depth(context) <= 0:
+            self.report({"INFO"}, "Already at model root")
+            return {"CANCELLED"}
+        groups.set_entity(context, None)
+        obj = groups.pop_context(context)
+        _status(context, "Closed — editing " + obj.name)
+        return {"FINISHED"}
+
+
+class OFORM_OT_instance_component(Operator):
+    bl_idname = "oform.instance_component"
+    bl_label = "Instance Component"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        entity = groups.get_entity(context)
+        if entity is None or groups.kind_of(entity) != groups.KIND_COMPONENT:
+            self.report({"WARNING"}, "Select a component")
+            return {"CANCELLED"}
+        inst = groups.instance_component(context, entity)
+        if inst is None:
+            return {"CANCELLED"}
+        groups.set_entity(context, inst)
+        _status(context, "Instanced " + inst.name)
+        return {"FINISHED"}
+
+
+def _boolean_operands(context):
+    """Active mesh = target; another selected mesh = tool. Or entity pair."""
+    view = context.view_layer.objects
+    active = view.active
+    selected = [obj for obj in context.selected_objects if obj.type == "MESH"]
+    entity = groups.get_entity(context)
+    if entity is not None and entity.type == "MESH":
+        others = [obj for obj in selected if obj != entity and obj.type == "MESH"]
+        if others:
+            return entity, others[0]
+    if active is not None and active.type == "MESH":
+        others = [obj for obj in selected if obj != active]
+        if others:
+            return active, others[0]
+    if len(selected) >= 2:
+        return selected[0], selected[1]
+    return None, None
+
+
+class OFORM_OT_boolean(Operator):
+    bl_idname = "oform.boolean"
+    bl_label = "Boolean"
+    bl_description = (
+        "Combine two mesh solids. Select target (active) and tool, then run Union / Subtract / Intersect"
+    )
+    bl_options = {"UNDO"}
+
+    operation: EnumProperty(
+        items=(
+            ("UNION", "Union", "Combine solids"),
+            ("DIFFERENCE", "Subtract", "Subtract tool from target"),
+            ("INTERSECT", "Intersect", "Keep shared volume"),
+        ),
+        default="UNION",
+    )
+
+    def execute(self, context):
+        target, tool = _boolean_operands(context)
+        if target is None or tool is None:
+            hint = (
+                "Solid Boolean: select two closed meshes in Object mode "
+                "(active = keep). Use rail Solids or Solids menu."
+            )
+            self.report({"WARNING"}, hint)
+            _status(context, hint)
+            return {"CANCELLED"}
+        if context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+        ok, message = solids.boolean_objects(context, target, tool, self.operation)
+        if not ok:
+            self.report({"ERROR"}, message)
+            _status(context, message)
+            return {"CANCELLED"}
+        # Keep target; deselect tool so the result is clear.
+        for obj in context.selected_objects:
+            obj.select_set(obj == target)
+        context.view_layer.objects.active = target
+        _status(context, message)
+        self.report({"INFO"}, message)
+        return {"FINISHED"}
+
+
+class OFORM_OT_boolean_union(Operator):
+    bl_idname = "oform.boolean_union"
+    bl_label = "Solid Union"
+    bl_description = "Union two solids (active mesh kept). Select two closed meshes first"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        return bpy.ops.oform.boolean(operation="UNION")
+
+
+class OFORM_OT_boolean_subtract(Operator):
+    bl_idname = "oform.boolean_subtract"
+    bl_label = "Solid Subtract"
+    bl_description = "Subtract the other solid from the active mesh"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        return bpy.ops.oform.boolean(operation="DIFFERENCE")
+
+
+class OFORM_OT_boolean_intersect(Operator):
+    bl_idname = "oform.boolean_intersect"
+    bl_label = "Solid Intersect"
+    bl_description = "Keep only the shared volume of two solids"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        return bpy.ops.oform.boolean(operation="INTERSECT")
+
+
+class OFORM_OT_solid_inspect(Operator):
+    bl_idname = "oform.solid_inspect"
+    bl_label = "Inspect Solid"
+    bl_description = "Report whether the active mesh is a closed manifold solid"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        obj = context.view_layer.objects.active
+        if obj is None or obj.type != "MESH":
+            self.report({"WARNING"}, "Select a mesh object")
+            return {"CANCELLED"}
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        ok = solids.is_solid(bm)
+        bm.free()
+        message = "Solid (closed manifold)" if ok else "Not a solid — open or non-manifold"
+        _status(context, message)
+        self.report({"INFO"} if ok else {"WARNING"}, message)
+        return {"FINISHED"}
+
+
 # ---------------------------------------------------------------------------
 # Modal tools.
 # ---------------------------------------------------------------------------
 
 
-def _snap(context, bm, event, axis, parallel, anchor):
-    return inference.infer(
+def _snap(context, bm, event, axis, parallel, anchor, plane=None):
+    snap = inference.infer(
         context,
         bm,
         _mouse(event),
         axis=axis,
         parallel=parallel,
         anchor=anchor,
+        plane=plane,
     )
+    set_inference_feedback(snap)
+    # Surface snap label into the status when useful.
+    if snap is not None and snap.label and axis is None:
+        pass
+    return snap
 
 
 class OFORM_OT_tool_line(Operator, _Tool):
@@ -481,10 +1174,8 @@ class OFORM_OT_tool_line(Operator, _Tool):
     bl_label = "Line"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
         self._segments = 0
-        return self._arm(context, "Click to set the first point")
+        return self._start(context, "Click to set the first point")
 
     def modal(self, context, event):
         handled = self._event(context, event)
@@ -495,17 +1186,21 @@ class OFORM_OT_tool_line(Operator, _Tool):
             return handled
         _obj, bm = _edit(context)
         anchor = self._points[-1] if self._points else None
-        snap = _snap(context, bm, event, self._axis, self._parallel, anchor)
+        snap = _snap(
+            context, bm, event, self._axis, self._parallel, anchor, plane=self._plane
+        )
         if snap.tangent is not None:
             self._parallel = snap.tangent
         if event.type == "LEFTMOUSE" and event.value == "PRESS":
+            self._adopt_plane(snap, bm)
             self._points.append(snap.co.copy())
+            hint = snap.label + " · " if snap.label else ""
             if len(self._points) >= 2:
                 _do(bpy.ops.oform.line_add, a=self._points[-2], b=self._points[-1])
                 self._segments += 1
-                _status(context, "Click the next point, or type a length")
+                _status(context, hint + "Click the next point, or type a length")
             else:
-                _status(context, "Click the next point, or type a length")
+                _status(context, hint + "Click the next point, or type a length")
             return {"RUNNING_MODAL"}
         if handled == {"APPLY"} and self._points and self._buf.strip():
             try:
@@ -523,7 +1218,9 @@ class OFORM_OT_tool_line(Operator, _Tool):
             return {"RUNNING_MODAL"}
         if self._points:
             set_preview([self._points[-1], snap.co])
-            _measure(context, "{:.3f}".format((snap.co - self._points[-1]).length))
+            label = ("  " + snap.label) if snap.label else ""
+            _measure(context, "{:.3f}{}".format((snap.co - self._points[-1]).length, label))
+            _status(context, (snap.label + "  " if snap.label else "") + "Click the next point, or type a length")
         return {"RUNNING_MODAL"}
 
 
@@ -532,9 +1229,7 @@ class OFORM_OT_tool_rectangle(Operator, _Tool):
     bl_label = "Rectangle"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
-        return self._arm(context, "Click to set the first corner")
+        return self._start(context, "Click to set the first corner")
 
     def modal(self, context, event):
         handled = self._event(context, event)
@@ -542,21 +1237,33 @@ class OFORM_OT_tool_rectangle(Operator, _Tool):
             return handled
         _obj, bm = _edit(context)
         anchor = self._anchor
-        snap = _snap(context, bm, event, self._axis, self._parallel, anchor)
+        snap = _snap(
+            context, bm, event, self._axis, self._parallel, anchor, plane=self._plane
+        )
         if snap.tangent is not None:
             self._parallel = snap.tangent
         if event.type == "LEFTMOUSE" and event.value == "PRESS":
             if self._anchor is None:
+                self._adopt_plane(snap, bm)
                 self._anchor = snap.co.copy()
-                self._normal = snap.normal.copy()
+                self._normal = (
+                    self._plane.normal.copy()
+                    if self._plane is not None
+                    else snap.normal.copy()
+                )
                 _status(context, "Click the opposite corner, or type width, depth")
             else:
-                _do(bpy.ops.oform.rectangle, 
-                    corner_a=self._anchor, corner_b=snap.co, normal=self._normal
+                _do(
+                    bpy.ops.oform.rectangle,
+                    corner_a=self._anchor,
+                    corner_b=snap.co,
+                    normal=self._normal,
                 )
                 self._anchor = None
+                self._plane = None
                 self._buf = ""
                 set_preview([])
+                set_inference_feedback(None)
                 _measure(context, "")
                 _status(context, "Click to set the first corner")
             return {"RUNNING_MODAL"}
@@ -575,13 +1282,16 @@ class OFORM_OT_tool_rectangle(Operator, _Tool):
             corner_b = self._anchor + u * width + v * depth
             _do(bpy.ops.oform.rectangle, corner_a=self._anchor, corner_b=corner_b, normal=normal)
             self._anchor = None
+            self._plane = None
             self._buf = ""
             set_preview([])
+            set_inference_feedback(None)
             _measure(context, "")
             _status(context, "Click to set the first corner")
             return {"RUNNING_MODAL"}
         if self._anchor is not None:
-            corners = geom.rectangle_corners(self._anchor, snap.co, getattr(self, "_normal", snap.normal))
+            normal = getattr(self, "_normal", snap.normal)
+            corners = geom.rectangle_corners(self._anchor, snap.co, normal)
             set_preview(corners + [corners[0]])
             _measure(context, "{:.3f}, {:.3f}".format(
                 (corners[1] - corners[0]).length,
@@ -595,17 +1305,17 @@ class OFORM_OT_tool_circle(Operator, _Tool):
     bl_label = "Circle"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
         self._segments = 24
-        return self._arm(context, "Click to set the center")
+        return self._start(context, "Click to set the center")
 
     def modal(self, context, event):
         handled = self._event(context, event)
         if handled in ({"FINISHED"}, {"PASS_THROUGH"}):
             return handled
         _obj, bm = _edit(context)
-        snap = _snap(context, bm, event, self._axis, self._parallel, self._anchor)
+        snap = _snap(
+            context, bm, event, self._axis, self._parallel, self._anchor, plane=self._plane
+        )
         raw = self._buf.strip().lower()
         if raw.endswith("s") and raw[:-1].isdigit():
             self._segments = max(3, int(raw[:-1]))
@@ -615,19 +1325,27 @@ class OFORM_OT_tool_circle(Operator, _Tool):
             return {"RUNNING_MODAL"}
         if event.type == "LEFTMOUSE" and event.value == "PRESS":
             if self._anchor is None:
+                self._adopt_plane(snap, bm)
                 self._anchor = snap.co.copy()
-                self._normal = snap.normal.copy()
+                self._normal = (
+                    self._plane.normal.copy()
+                    if self._plane is not None
+                    else snap.normal.copy()
+                )
                 _status(context, "Click the radius, type a radius, or type 24s for segments")
             else:
                 radius = (snap.co - self._anchor).length
-                _do(bpy.ops.oform.circle, 
+                _do(
+                    bpy.ops.oform.circle,
                     center=self._anchor,
                     radius=radius,
                     normal=self._normal,
                     segments=self._segments,
                 )
                 self._anchor = None
+                self._plane = None
                 set_preview([])
+                set_inference_feedback(None)
                 _measure(context, "")
                 _status(context, "Click to set the center")
             return {"RUNNING_MODAL"}
@@ -636,20 +1354,25 @@ class OFORM_OT_tool_circle(Operator, _Tool):
                 radius = _parse_length(self._buf)
             except ValueError:
                 return {"RUNNING_MODAL"}
-            _do(bpy.ops.oform.circle, 
+            _do(
+                bpy.ops.oform.circle,
                 center=self._anchor,
                 radius=radius,
                 normal=getattr(self, "_normal", Vector((0.0, 0.0, 1.0))),
                 segments=self._segments,
             )
             self._anchor = None
+            self._plane = None
             self._buf = ""
             set_preview([])
+            set_inference_feedback(None)
             _measure(context, "")
             _status(context, "Click to set the center")
             return {"RUNNING_MODAL"}
         if self._anchor is not None:
-            pts = geom.circle_points(self._anchor, (snap.co - self._anchor).length, self._normal, self._segments)
+            pts = geom.circle_points(
+                self._anchor, (snap.co - self._anchor).length, self._normal, self._segments
+            )
             if pts:
                 set_preview(pts + [pts[0]])
             _measure(context, "{:.3f}".format((snap.co - self._anchor).length))
@@ -661,9 +1384,7 @@ class OFORM_OT_tool_arc(Operator, _Tool):
     bl_label = "Arc"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
-        return self._arm(context, "Click the arc start point")
+        return self._start(context, "Click the arc start point")
 
     def modal(self, context, event):
         handled = self._event(context, event)
@@ -671,17 +1392,27 @@ class OFORM_OT_tool_arc(Operator, _Tool):
             return handled
         _obj, bm = _edit(context)
         anchor = self._points[-1] if self._points else None
-        snap = _snap(context, bm, event, self._axis, self._parallel, anchor)
+        snap = _snap(
+            context, bm, event, self._axis, self._parallel, anchor, plane=self._plane
+        )
         if event.type == "LEFTMOUSE" and event.value == "PRESS":
+            self._adopt_plane(snap, bm)
             self._points.append(snap.co.copy())
             if len(self._points) == 1:
                 _status(context, "Click the arc end point")
             elif len(self._points) == 2:
                 _status(context, "Click the bulge, or type a bulge distance")
             else:
-                _do(bpy.ops.oform.arc, start=self._points[0], end=self._points[1], bulge=self._points[2])
+                _do(
+                    bpy.ops.oform.arc,
+                    start=self._points[0],
+                    end=self._points[1],
+                    bulge=self._points[2],
+                )
                 self._points.clear()
+                self._plane = None
                 set_preview([])
+                set_inference_feedback(None)
                 _measure(context, "")
                 _status(context, "Click the arc start point")
             return {"RUNNING_MODAL"}
@@ -698,12 +1429,10 @@ class OFORM_OT_tool_push_pull(Operator, _Tool):
     bl_label = "Push/Pull"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
         self._face_index = -1
         self._origin = None
         self._direction = Vector((0.0, 0.0, 1.0))
-        return self._arm(context, "Click a face to push or pull")
+        return self._start(context, "Click a face to push or pull")
 
     def modal(self, context, event):
         handled = self._event(context, event)
@@ -725,13 +1454,19 @@ class OFORM_OT_tool_push_pull(Operator, _Tool):
                 self._face_index = face.index
                 self._origin = face.calc_center_median().copy()
                 self._direction = face.normal.copy()
-                _status(context, "Move to extrude, or type a distance")
+                _status(context, "Move to extrude, or type a distance. Ctrl copies the face")
             else:
                 distance = self._distance(context, event)
-                _do(bpy.ops.oform.push_pull, distance=distance, face_index=self._face_index)
+                _do(
+                    bpy.ops.oform.push_pull,
+                    distance=distance,
+                    face_index=self._face_index,
+                    copy=event.ctrl,
+                )
                 self._origin = None
                 self._face_index = -1
                 self._buf = ""
+                set_preview([])
                 _measure(context, "")
                 _status(context, "Click a face to push or pull")
             return {"RUNNING_MODAL"}
@@ -740,16 +1475,45 @@ class OFORM_OT_tool_push_pull(Operator, _Tool):
                 distance = _parse_length(self._buf)
             except ValueError:
                 return {"RUNNING_MODAL"}
-            _do(bpy.ops.oform.push_pull, distance=distance, face_index=self._face_index)
+            _do(
+                bpy.ops.oform.push_pull,
+                distance=distance,
+                face_index=self._face_index,
+                copy=event.ctrl,
+            )
             self._origin = None
             self._buf = ""
+            set_preview([])
             _measure(context, "")
             _status(context, "Click a face to push or pull")
             return {"RUNNING_MODAL"}
         if self._origin is not None:
             distance = self._distance(context, event)
             _measure(context, "{:.3f}".format(distance))
+            self._preview_extrude(bm, distance)
+        else:
+            set_preview([])
         return {"RUNNING_MODAL"}
+
+    def _preview_extrude(self, bm, distance):
+        bm.faces.ensure_lookup_table()
+        if self._face_index < 0 or self._face_index >= len(bm.faces):
+            set_preview([])
+            return
+        face = bm.faces[self._face_index]
+        axis = self._direction.copy()
+        if self._axis == "X":
+            axis = Vector((1.0, 0.0, 0.0))
+        elif self._axis == "Y":
+            axis = Vector((0.0, 1.0, 0.0))
+        elif self._axis == "Z":
+            axis = Vector((0.0, 0.0, 1.0))
+        delta = axis.normalized() * distance
+        base = [vert.co.copy() for vert in face.verts]
+        lifted = [co + delta for co in base]
+        strokes = [lifted + [lifted[0]]]
+        strokes.extend([[a, b] for a, b in zip(base, lifted)])
+        set_preview_strokes(strokes)
 
     def _distance(self, context, event):
         from bpy_extras import view3d_utils
@@ -778,11 +1542,9 @@ class OFORM_OT_tool_offset(Operator, _Tool):
     bl_label = "Offset"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
         self._face_index = -1
         self._origin = None
-        return self._arm(context, "Click a face to offset")
+        return self._start(context, "Click a face to offset")
 
     def modal(self, context, event):
         handled = self._event(context, event)
@@ -830,9 +1592,7 @@ class OFORM_OT_tool_eraser(Operator, _Tool):
     bl_label = "Eraser"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
-        return self._arm(context, "Click an edge to erase it")
+        return self._start(context, "Click an edge to erase. Ctrl softens. Shift hides")
 
     def modal(self, context, event):
         handled = self._event(context, event)
@@ -844,7 +1604,12 @@ class OFORM_OT_tool_eraser(Operator, _Tool):
             if edge is not None:
                 bm.edges.ensure_lookup_table()
                 index = edge.index
-                _do(bpy.ops.oform.erase, edge_index=index)
+                if event.ctrl:
+                    _do(bpy.ops.oform.soften, edge_index=index, smooth=True)
+                elif event.shift:
+                    _do(bpy.ops.oform.hide_edges, edge_index=index, hide=True)
+                else:
+                    _do(bpy.ops.oform.erase, edge_index=index)
             return {"RUNNING_MODAL"}
         return {"RUNNING_MODAL"}
 
@@ -854,11 +1619,9 @@ class OFORM_OT_tool_paint(Operator, _Tool):
     bl_label = "Paint"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
         if _prop(context.scene, "oform_color") is None:
             pass
-        return self._arm(context, "Click a face to paint. Keys 1-8 pick a color")
+        return self._start(context, "Click a face to paint. Keys 1-8 pick a color")
 
     def modal(self, context, event):
         # Number keys also match the measurement buffer. Pick the color first.
@@ -897,19 +1660,69 @@ class OFORM_OT_tool_paint(Operator, _Tool):
 class OFORM_OT_tool_select(Operator, _Tool):
     bl_idname = "oform.tool_select"
     bl_label = "Select"
+    bl_description = "Select geometry. Click · double related · triple connected. Alt+1/2/3"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
         self._box = None
-        return self._arm(context, "Click to select. Drag a box. Shift toggles")
+        self._clicks = selection.ClickTracker()
+        self._pending = None  # (mouse, extend, token) awaiting single-click settle
+        self._token = 0
+        return self._start(
+            context,
+            "Click · double related · triple connected · Alt+1/2/3. Esc closes",
+        )
+
+    def _apply_selection(self, context, mouse, count, extend):
+        obj, bm = _edit(context)
+        mode = selection.apply_click(context, bm, mouse, count, extend=extend)
+        _commit(obj)
+        if mode == "enter":
+            ctx = groups.context_object(context)
+            _status(context, "Editing " + (ctx.name if ctx else "group"))
+        elif mode == "entity":
+            entity = groups.get_entity(context)
+            if entity is not None:
+                _status(
+                    context,
+                    "Selected {} ({})".format(entity.name, groups.kind_of(entity)),
+                )
+        elif mode == "double":
+            _status(context, "Related geometry selected")
+        elif mode == "triple":
+            _status(context, "Connected geometry selected")
+        elif mode == "single":
+            _status(context, "Selected")
+        else:
+            _status(context, "Selection cleared")
 
     def modal(self, context, event):
         handled = self._event(context, event)
         if handled in ({"FINISHED"}, {"PASS_THROUGH"}):
             return handled
+        # Keyboard alternatives to multi-click (accessibility).
+        if event.value == "PRESS" and event.type == "ONE" and event.alt:
+            obj, bm = _edit(context)
+            hit = selection.pick_mesh(context, bm, _mouse(event))
+            selection.select_entity(bm, hit, extend=event.shift)
+            _commit(obj)
+            _status(context, "Selected entity (Alt+1)")
+            return {"RUNNING_MODAL"}
+        if event.value == "PRESS" and event.type == "TWO" and event.alt:
+            obj, bm = _edit(context)
+            hit = selection.pick_mesh(context, bm, _mouse(event))
+            selection.select_related(bm, hit, extend=event.shift)
+            _commit(obj)
+            _status(context, "Related geometry (Alt+2)")
+            return {"RUNNING_MODAL"}
+        if event.value == "PRESS" and event.type == "THREE" and event.alt:
+            obj, bm = _edit(context)
+            hit = selection.pick_mesh(context, bm, _mouse(event))
+            selection.select_connected(bm, hit, extend=event.shift)
+            _commit(obj)
+            _status(context, "Connected geometry (Alt+3)")
+            return {"RUNNING_MODAL"}
         if event.type == "LEFTMOUSE" and event.value == "PRESS":
-            self._box = (_mouse(event), _mouse(event), event.shift)
+            self._box = (_mouse(event), _mouse(event), event.shift or event.ctrl)
             return {"RUNNING_MODAL"}
         if event.type == "MOUSEMOVE" and self._box is not None:
             self._box = (self._box[0], _mouse(event), self._box[2])
@@ -917,12 +1730,34 @@ class OFORM_OT_tool_select(Operator, _Tool):
         if event.type == "LEFTMOUSE" and event.value == "RELEASE" and self._box is not None:
             start, end, extend = self._box
             self._box = None
-            obj, bm = _edit(context)
             if (Vector(start) - Vector(end)).length < 4.0:
-                _pick_select(context, bm, end, extend)
+                count = self._clicks.register(end)
+                if count >= 2:
+                    # Double/triple supersedes any pending single-click.
+                    self._token += 1
+                    self._pending = None
+                    self._apply_selection(context, end, count, extend)
+                else:
+                    # Defer single-click until the multi-click window closes.
+                    self._token += 1
+                    token = self._token
+                    mouse = end
+                    ext = extend
+
+                    def _settle():
+                        if getattr(self, "_token", None) != token:
+                            return None
+                        self._apply_selection(context, mouse, 1, ext)
+                        return None
+
+                    bpy.app.timers.register(_settle, first_interval=selection.DOUBLE_S)
             else:
+                self._clicks.reset()
+                self._token += 1
+                groups.set_entity(context, None)
+                obj, bm = _edit(context)
                 _box_select(context, bm, start, end, extend)
-            _commit(obj)
+                _commit(obj)
             return {"RUNNING_MODAL"}
         return {"RUNNING_MODAL"}
 
@@ -932,18 +1767,27 @@ class OFORM_OT_tool_move(Operator, _Tool):
     bl_label = "Move"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
-        return self._arm(context, "Click a base point on the selection")
+        return self._start(context, "Click a base point on the selection")
 
     def modal(self, context, event):
         handled = self._event(context, event)
         if handled in ({"FINISHED"}, {"PASS_THROUGH"}):
             return handled
         obj, bm = _edit(context)
-        if event.type == "LEFTMOUSE" and event.value == "PRESS" and not geom.selected_verts(bm):
-            _pick_select(context, bm, _mouse(event), False)
-            _commit(obj)
+        entity = groups.get_entity(context)
+        if (
+            event.type == "LEFTMOUSE"
+            and event.value == "PRESS"
+            and entity is None
+            and not geom.selected_verts(bm)
+        ):
+            container = groups.pick_container(context, _mouse(event))
+            if container is not None:
+                groups.set_entity(context, container)
+                entity = container
+            else:
+                _pick_select(context, bm, _mouse(event), False)
+                _commit(obj)
         snap = _snap(context, bm, event, self._axis, self._parallel, self._anchor)
         if snap.tangent is not None:
             self._parallel = snap.tangent
@@ -986,11 +1830,9 @@ class OFORM_OT_tool_rotate(Operator, _Tool):
     bl_label = "Rotate"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
         self._ref = None
         self._axis_vec = Vector((0.0, 0.0, 1.0))
-        return self._arm(context, "Click the rotation center")
+        return self._start(context, "Click the rotation center")
 
     def modal(self, context, event):
         handled = self._event(context, event)
@@ -1045,10 +1887,8 @@ class OFORM_OT_tool_scale(Operator, _Tool):
     bl_label = "Scale"
 
     def invoke(self, context, _event):
-        if context.area is None or context.area.type != "VIEW_3D":
-            return {"CANCELLED"}
         self._base = None
-        return self._arm(context, "Click to set the scale center")
+        return self._start(context, "Click to set the scale center")
 
     def modal(self, context, event):
         handled = self._event(context, event)
@@ -1091,6 +1931,277 @@ class OFORM_OT_tool_scale(Operator, _Tool):
             factor = (snap.co - self._anchor).length / self._base
             _measure(context, "{:.3f}".format(factor))
         return {"RUNNING_MODAL"}
+
+
+class OFORM_OT_tool_tape(Operator, _Tool):
+    bl_idname = "oform.tool_tape"
+    bl_label = "Tape Measure"
+
+    def invoke(self, context, _event):
+        return self._start(context, "Click the tape start. Ctrl+second click creates a guide")
+
+    def modal(self, context, event):
+        handled = self._event(context, event)
+        if handled in ({"FINISHED"}, {"PASS_THROUGH"}):
+            return handled
+        _obj, bm = _edit(context)
+        snap = _snap(context, bm, event, self._axis, self._parallel, self._anchor)
+        if snap.tangent is not None:
+            self._parallel = snap.tangent
+        if event.type == "LEFTMOUSE" and event.value == "PRESS":
+            if self._anchor is None:
+                self._anchor = snap.co.copy()
+                _status(context, "Click the end point. Ctrl creates a construction guide")
+            else:
+                _do(
+                    bpy.ops.oform.tape,
+                    a=self._anchor,
+                    b=snap.co,
+                    create_guide=event.ctrl,
+                )
+                self._anchor = None
+                self._buf = ""
+                set_preview([])
+                _status(context, "Click the tape start. Ctrl+second click creates a guide")
+            return {"RUNNING_MODAL"}
+        if handled == {"APPLY"} and self._anchor is not None and self._buf.strip():
+            try:
+                length = _parse_length(self._buf)
+            except ValueError:
+                return {"RUNNING_MODAL"}
+            direction = snap.co - self._anchor
+            if direction.length < 1e-8:
+                direction = Vector((1.0, 0.0, 0.0))
+            end = self._anchor + direction.normalized() * length
+            _do(bpy.ops.oform.tape, a=self._anchor, b=end, create_guide=event.ctrl)
+            self._anchor = None
+            self._buf = ""
+            set_preview([])
+            return {"RUNNING_MODAL"}
+        if self._anchor is not None:
+            set_preview([self._anchor, snap.co])
+            _measure(context, "{:.3f}".format((snap.co - self._anchor).length))
+        return {"RUNNING_MODAL"}
+
+
+class OFORM_OT_tool_polygon(Operator, _Tool):
+    bl_idname = "oform.tool_polygon"
+    bl_label = "Polygon"
+
+    def invoke(self, context, _event):
+        self._sides = 6
+        self._normal = Vector((0.0, 0.0, 1.0))
+        return self._start(context, "Click the polygon center. Type Ns for sides (e.g. 8s)")
+
+    def modal(self, context, event):
+        handled = self._event(context, event)
+        if handled in ({"FINISHED"}, {"PASS_THROUGH"}):
+            return handled
+        _obj, bm = _edit(context)
+        snap = _snap(
+            context, bm, event, self._axis, self._parallel, self._anchor, plane=self._plane
+        )
+        if snap.kind == "face":
+            self._normal = snap.normal.copy()
+        if handled == {"APPLY"} and self._buf.strip().lower().endswith("s"):
+            try:
+                self._sides = max(3, int(float(self._buf[:-1])))
+            except ValueError:
+                return {"RUNNING_MODAL"}
+            self._buf = ""
+            _measure(context, "")
+            _status(context, "{:d}-gon. Click center, then radius".format(self._sides))
+            return {"RUNNING_MODAL"}
+        if event.type == "LEFTMOUSE" and event.value == "PRESS":
+            if self._anchor is None:
+                self._adopt_plane(snap, bm)
+                self._anchor = snap.co.copy()
+                if self._plane is not None:
+                    self._normal = self._plane.normal.copy()
+                _status(context, "Click the radius, or type a length")
+            else:
+                radius = (snap.co - self._anchor).length
+                _do(
+                    bpy.ops.oform.polygon,
+                    center=self._anchor,
+                    radius=radius,
+                    normal=self._normal,
+                    sides=self._sides,
+                )
+                self._anchor = None
+                self._plane = None
+                self._buf = ""
+                set_preview([])
+                set_inference_feedback(None)
+                _measure(context, "")
+                _status(context, "Click the polygon center. Type Ns for sides (e.g. 8s)")
+            return {"RUNNING_MODAL"}
+        if handled == {"APPLY"} and self._anchor is not None and self._buf.strip():
+            try:
+                radius = _parse_length(self._buf)
+            except ValueError:
+                return {"RUNNING_MODAL"}
+            _do(
+                bpy.ops.oform.polygon,
+                center=self._anchor,
+                radius=radius,
+                normal=self._normal,
+                sides=self._sides,
+            )
+            self._anchor = None
+            self._plane = None
+            self._buf = ""
+            set_preview([])
+            set_inference_feedback(None)
+            return {"RUNNING_MODAL"}
+        if self._anchor is not None:
+            radius = (snap.co - self._anchor).length
+            pts = geom.polygon_points(self._anchor, radius, self._normal, self._sides)
+            if pts:
+                set_preview(pts + [pts[0]])
+            _measure(context, "{:.3f}".format(radius))
+        return {"RUNNING_MODAL"}
+
+
+class OFORM_OT_tool_freehand(Operator, _Tool):
+    bl_idname = "oform.tool_freehand"
+    bl_label = "Freehand"
+
+    def invoke(self, context, _event):
+        self._drawing = False
+        self._stroke = []
+        return self._start(context, "Drag to draw a freehand curve (Shift+L)")
+
+    def modal(self, context, event):
+        handled = self._event(context, event)
+        if handled in ({"FINISHED"}, {"PASS_THROUGH"}):
+            return handled
+        _obj, bm = _edit(context)
+        snap = _snap(context, bm, event, self._axis, self._parallel, None)
+        if event.type == "LEFTMOUSE" and event.value == "PRESS":
+            self._drawing = True
+            self._stroke = [snap.co.copy()]
+            return {"RUNNING_MODAL"}
+        if event.type == "MOUSEMOVE" and self._drawing:
+            if not self._stroke or (snap.co - self._stroke[-1]).length > 0.02:
+                self._stroke.append(snap.co.copy())
+                set_preview(self._stroke)
+            return {"RUNNING_MODAL"}
+        if event.type == "LEFTMOUSE" and event.value == "RELEASE" and self._drawing:
+            self._drawing = False
+            global _FREEHAND_BUF
+            _FREEHAND_BUF = list(self._stroke)
+            if len(_FREEHAND_BUF) >= 2:
+                _do(bpy.ops.oform.freehand)
+            self._stroke = []
+            set_preview([])
+            _status(context, "Drag to draw a freehand curve (Shift+L)")
+            return {"RUNNING_MODAL"}
+        return {"RUNNING_MODAL"}
+
+
+class OFORM_OT_tool_follow_me(Operator, _Tool):
+    bl_idname = "oform.tool_follow_me"
+    bl_label = "Follow Me"
+
+    def invoke(self, context, _event):
+        return self._start(context, "Select a path of edges, then click the profile face (J)")
+
+    def modal(self, context, event):
+        handled = self._event(context, event)
+        if handled in ({"FINISHED"}, {"PASS_THROUGH"}):
+            return handled
+        if event.type == "LEFTMOUSE" and event.value == "PRESS":
+            obj, bm = _edit(context)
+            face = _face_under_mouse(context, bm, event)
+            if face is None:
+                _pick_select(context, bm, _mouse(event), event.shift)
+                _commit(obj)
+                _status(context, "Path selected. Click the face to extrude along the path")
+                return {"RUNNING_MODAL"}
+            path_edges = [edge for edge in bm.edges if edge.select]
+            path = geom.ordered_path_coords(path_edges)
+            if len(path) < 2:
+                _status(context, "Select connected edges for the path first")
+                return {"RUNNING_MODAL"}
+            global _FOLLOW_PATH
+            _FOLLOW_PATH = path
+            geom._select_only_face(bm, face)
+            _commit(obj)
+            bm.faces.ensure_lookup_table()
+            _do(bpy.ops.oform.follow_me, face_index=face.index)
+            _status(context, "Select a path of edges, then click the profile face (J)")
+            return {"RUNNING_MODAL"}
+        return {"RUNNING_MODAL"}
+
+
+class OFORM_OT_tool_protractor(Operator, _Tool):
+    bl_idname = "oform.tool_protractor"
+    bl_label = "Protractor"
+
+    def invoke(self, context, _event):
+        self._points = []
+        return self._start(context, "Click the protractor center (X)")
+
+    def modal(self, context, event):
+        handled = self._event(context, event)
+        if handled in ({"FINISHED"}, {"PASS_THROUGH"}):
+            return handled
+        _obj, bm = _edit(context)
+        snap = _snap(context, bm, event, self._axis, self._parallel, self._points[-1] if self._points else None)
+        if event.type == "LEFTMOUSE" and event.value == "PRESS":
+            self._points.append(snap.co.copy())
+            if len(self._points) == 1:
+                _status(context, "Click the first ray")
+            elif len(self._points) == 2:
+                _status(context, "Click the second ray. Ctrl creates guide lines")
+            else:
+                center, a, b = self._points
+                angle = math.degrees(_signed_angle(center, a, b, Vector((0.0, 0.0, 1.0))))
+                _measure(context, "{:.2f} deg".format(angle))
+                _status(context, "Angle {:.2f} deg".format(angle))
+                if event.ctrl:
+                    geom.add_guide(bm, center, a)
+                    geom.add_guide(bm, center, b)
+                    _commit(_obj)
+                self._points.clear()
+                set_preview([])
+                _status(context, "Click the protractor center (X)")
+            return {"RUNNING_MODAL"}
+        if len(self._points) == 1:
+            set_preview([self._points[0], snap.co])
+        elif len(self._points) == 2:
+            set_preview([self._points[0], self._points[1], self._points[0], snap.co])
+            angle = math.degrees(_signed_angle(self._points[0], self._points[1], snap.co, Vector((0.0, 0.0, 1.0))))
+            _measure(context, "{:.2f} deg".format(angle))
+        return {"RUNNING_MODAL"}
+
+
+class OFORM_OT_tool_back_edges(Operator):
+    bl_idname = "oform.tool_back_edges"
+    bl_label = "Back Edges"
+
+    def invoke(self, context, _event):
+        space = None
+        for area in context.screen.areas:
+            if area.type == "VIEW_3D":
+                space = area.spaces.active
+                break
+        if space is None:
+            return {"CANCELLED"}
+        overlay = getattr(space, "overlay", None)
+        if overlay is not None and hasattr(overlay, "show_occlude_wire"):
+            overlay.show_occlude_wire = not overlay.show_occlude_wire
+            state = "on" if overlay.show_occlude_wire else "off"
+            _status(context, "Back edges " + state)
+        elif hasattr(space, "show_occlude_wire"):
+            space.show_occlude_wire = not space.show_occlude_wire
+            state = "on" if space.show_occlude_wire else "off"
+            _status(context, "Back edges " + state)
+        else:
+            _status(context, "Back edges toggle unavailable in this viewport")
+        _tool(context, self.bl_idname)
+        return {"FINISHED"}
 
 
 class OFORM_OT_view(Operator):
@@ -1329,10 +2440,28 @@ _CLASSES = (
     OFORM_OT_push_pull,
     OFORM_OT_offset,
     OFORM_OT_erase,
+    OFORM_OT_delete_selection,
     OFORM_OT_move,
     OFORM_OT_rotate,
     OFORM_OT_scale,
     OFORM_OT_paint,
+    OFORM_OT_polygon,
+    OFORM_OT_freehand,
+    OFORM_OT_tape,
+    OFORM_OT_follow_me,
+    OFORM_OT_soften,
+    OFORM_OT_hide_edges,
+    OFORM_OT_make_group,
+    OFORM_OT_make_component,
+    OFORM_OT_explode,
+    OFORM_OT_enter_group,
+    OFORM_OT_exit_group,
+    OFORM_OT_instance_component,
+    OFORM_OT_boolean,
+    OFORM_OT_boolean_union,
+    OFORM_OT_boolean_subtract,
+    OFORM_OT_boolean_intersect,
+    OFORM_OT_solid_inspect,
     OFORM_OT_tool_select,
     OFORM_OT_tool_eraser,
     OFORM_OT_tool_paint,
@@ -1340,11 +2469,17 @@ _CLASSES = (
     OFORM_OT_tool_arc,
     OFORM_OT_tool_rectangle,
     OFORM_OT_tool_circle,
+    OFORM_OT_tool_polygon,
+    OFORM_OT_tool_freehand,
     OFORM_OT_tool_push_pull,
     OFORM_OT_tool_offset,
+    OFORM_OT_tool_follow_me,
+    OFORM_OT_tool_tape,
+    OFORM_OT_tool_protractor,
     OFORM_OT_tool_move,
     OFORM_OT_tool_rotate,
     OFORM_OT_tool_scale,
+    OFORM_OT_tool_back_edges,
     OFORM_OT_view,
     OFORM_OT_tool_orbit,
     OFORM_OT_tool_pan,
@@ -1353,14 +2488,69 @@ _CLASSES = (
 )
 
 
+# Tooltips for icon-only Large Tool Set buttons (bl_description → hover / a11y).
+_TOOL_DESCRIPTIONS = {
+    "oform.tool_line": "Draw edges. Type a length, Enter. Arrow keys lock axes",
+    "oform.tool_rectangle": "Draw a rectangle on the working plane",
+    "oform.tool_circle": "Draw a circle. Type segments as 24s, then radius",
+    "oform.tool_arc": "Draw an arc with three clicks",
+    "oform.tool_polygon": "Regular polygon. Type 8s for sides before radius",
+    "oform.tool_freehand": "Sketch a freehand curve",
+    "oform.tool_push_pull": "Extrude a face. Ctrl copies",
+    "oform.tool_follow_me": "Extrude a face along a path",
+    "oform.tool_offset": "Offset edges of a face",
+    "oform.tool_move": "Move selection. Ctrl copies",
+    "oform.tool_rotate": "Rotate selection about a point",
+    "oform.tool_scale": "Scale selection",
+    "oform.tool_eraser": "Erase edges and faces. Ctrl soften, Shift hide",
+    "oform.tool_paint": "Paint faces with the current material colour",
+    "oform.tool_tape": "Measure distance. Ctrl creates a guide",
+    "oform.tool_protractor": "Measure / lock an angle. Ctrl creates guides",
+    "oform.tool_back_edges": "Toggle seeing edges behind faces",
+    "oform.tool_orbit": "Orbit the camera (also middle mouse)",
+    "oform.tool_pan": "Pan the camera (also Shift+middle mouse)",
+    "oform.tool_zoom": "Zoom the camera (also mouse wheel)",
+    "oform.tool_zoom_extents": "Frame all geometry",
+    "oform.make_component": "Make a component from the selection (G)",
+    "oform.make_group": "Make a group from the selection (Ctrl+G)",
+}
+
+
 def register():
+    global _PREVIEW_HANDLE, _LABEL_HANDLE
     for cls in _CLASSES:
+        desc = _TOOL_DESCRIPTIONS.get(getattr(cls, "bl_idname", ""))
+        if desc:
+            cls.bl_description = desc
         if getattr(cls, "is_registered", False):
             continue
         bpy.utils.register_class(cls)
+    if bpy.app.background:
+        return
+    if _PREVIEW_HANDLE is None:
+        _PREVIEW_HANDLE = bpy.types.SpaceView3D.draw_handler_add(
+            _draw_tool_preview, (), "WINDOW", "POST_VIEW"
+        )
+    if _LABEL_HANDLE is None:
+        _LABEL_HANDLE = bpy.types.SpaceView3D.draw_handler_add(
+            _draw_snap_label, (), "WINDOW", "POST_PIXEL"
+        )
 
 
 def unregister():
+    global _PREVIEW_HANDLE, _LABEL_HANDLE
+    if _LABEL_HANDLE is not None:
+        try:
+            bpy.types.SpaceView3D.draw_handler_remove(_LABEL_HANDLE, "WINDOW")
+        except Exception:
+            pass
+        _LABEL_HANDLE = None
+    if _PREVIEW_HANDLE is not None:
+        try:
+            bpy.types.SpaceView3D.draw_handler_remove(_PREVIEW_HANDLE, "WINDOW")
+        except Exception:
+            pass
+        _PREVIEW_HANDLE = None
     for cls in reversed(_CLASSES):
         if getattr(cls, "is_registered", False):
             bpy.utils.unregister_class(cls)

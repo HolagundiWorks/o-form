@@ -17,29 +17,43 @@ import zlib
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Suite light shell (Architecture Office Suit / OSAS).
-FOG = (242, 244, 247)       # #F2F4F7 page background
-SOFT = (236, 238, 242)      # #ECEEF2 navigation pane
+# Suite shell tokens (aligned with O-Draft Fluent graphite / off-white).
+# Light
+FOG = (243, 243, 243)       # #F3F3F3 app background
+SOFT = (249, 249, 249)      # #F9F9F9 surface / side pane
 WHITE = (255, 255, 255)
-INK = (23, 24, 27)          # #17181B
-MUTED = (92, 99, 112)       # #5C6370
-EDGE = (208, 212, 220)      # #D0D4DC
-# Pastel green accent. Ink sits on it; SELECT is only for viewport picks.
+INK = (26, 26, 26)          # #1A1A1A
+MUTED = (92, 92, 92)        # #5C5C5C
+EDGE = (209, 209, 209)      # #D1D1D1
+# O-Form product accent (pastel green) + O-Draft AI channel blue.
 ACCENT = (198, 230, 211)    # #C6E6D3 plate / soft highlight
 ACCENT_ON = (143, 203, 170)  # #8FCBAA selected control fill
 ACCENT_PRESS = (176, 216, 193)
 SELECT = (63, 163, 106)     # #3FA36A selection / outline_sel
+AI_ACCENT = (0, 120, 212)   # #0078D4 Ask channel (light)
+CANVAS_LIGHT = (255, 255, 255)
+# Dark (O-Draft graphite)
+FOG_DARK = (27, 27, 27)     # #1B1B1B
+SOFT_DARK = (32, 32, 32)    # #202020
+SURFACE_DARK = (44, 44, 44) # #2C2C2C
+INK_DARK = (243, 243, 243)  # #F3F3F3
+MUTED_DARK = (200, 200, 200)
+EDGE_DARK = (61, 61, 61)    # #3D3D3D
+AI_ACCENT_DARK = (96, 205, 255)  # #60CDFF
+CANVAS_DARK = (0, 0, 0)
+SELECT_DARK = (96, 205, 255)
 
 PRODUCT = "O-Form"
 SUBTITLE = "Modeling"
 TAGLINE = "Push/pull solid modeling"
 PRINCIPLE = "Open Source. Built for Architects. Driven by Community."
 SUITE = "OSAS · Open Source Architecture Suit"
-SUITE_FULL = "OSAS, the Open Source Architecture Suit"
 DEVELOPER = "Human Centric Works"
 COMPANY_LINE = "Human Centric Works · Hospet"
 DEVELOPED_BY = "Developed by Human Centric Works · Hospet"
 CLONE_OF = "A clone of Blender"
+# End-user About line — engine credit without leading with Blender product chrome.
+ENGINE_LINE = "Modelling engine"
 LICENSE_LINE = "Licensed under the GNU General Public License, version 2 or later"
 
 # Suite mark, in the 194 box used by the other apps.
@@ -118,20 +132,136 @@ def _rounded(size, plate, mark, radius_factor=0.22):
     return out
 
 
-def write_assets():
-    mark = _rounded(256, ACCENT, INK)
-    with open(os.path.join(_HERE, "mark.png"), "wb") as handle:
-        handle.write(_png(256, 256, mark))
+def mark_svg(name=PRODUCT, plate=None, ink=None):
+    """Official OSAS suite mark: C + lower arc + centre ring on a coloured plate.
+
+    Sister apps use white strokes on saturated plates; O-Form uses ink on the
+    pastel green plate so the glyph stays readable.
+    """
+    plate = plate or ACCENT
+    ink = ink or INK
+    fill = "#{:02X}{:02X}{:02X}".format(*plate)
+    stroke = "#{:02X}{:02X}{:02X}".format(*ink)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 194 194" '
+        'width="194" height="194">\n'
+        "  <title>{}</title>\n"
+        '  <rect width="194" height="194" rx="34" ry="34" fill="{}"/>\n'
+        '  <g fill="none" stroke="{}">\n'
+        '    <path d="M107 27A69 69 0 0 0 107 165" stroke-width="18"/>\n'
+        '    <path d="M57 96A50 50 0 0 0 157 96" stroke-width="12"/>\n'
+        '    <circle cx="107" cy="96" r="18.5" stroke-width="5"/>\n'
+        "  </g>\n"
+        "</svg>\n"
+    ).format(name, fill, stroke)
+
+
+def _ico(images):
+    """ICO container of PNG frames (Vista+). ``images`` is [(size, png_bytes), ...]."""
+    count = len(images)
+    offset = 6 + 16 * count
+    header = struct.pack("<HHH", 0, 1, count)
+    entries = bytearray()
+    body = bytearray()
+    for size, data in images:
+        w = 0 if size >= 256 else size
+        h = 0 if size >= 256 else size
+        entries.extend(struct.pack("<BBBBHHII", w, h, 0, 0, 1, 32, len(data), offset))
+        body.extend(data)
+        offset += len(data)
+    return bytes(header) + bytes(entries) + bytes(body)
+
+
+def _splash_rgba(width=960, height=420):
+    """Lockup: pastel mark + O-Form / Modeling text (splash / about strip)."""
+    out = bytearray(width * height * 4)
+    # Transparent / white paper background
+    for i in range(0, len(out), 4):
+        out[i:i + 4] = bytes((255, 255, 255, 255))
+    mark_size = min(height - 40, 280)
+    mark = _rounded(mark_size, ACCENT, INK)
+    ox = 48
+    oy = (height - mark_size) // 2
+    for py in range(mark_size):
+        for px in range(mark_size):
+            src = (py * mark_size + px) * 4
+            a = mark[src + 3]
+            if a == 0:
+                continue
+            dx = ox + px
+            dy = oy + py
+            if not (0 <= dx < width and 0 <= dy < height):
+                continue
+            dst = (dy * width + dx) * 4
+            # Alpha-over onto white
+            alpha = a / 255.0
+            for c in range(3):
+                out[dst + c] = int(round(mark[src + c] * alpha + out[dst + c] * (1.0 - alpha)))
+            out[dst + 3] = 255
+    # Title block is drawn by the UI splash; keep a wide mark-only strip usable
+    # as a fallback bitmap. (Text raster would need a font atlas.)
+    return out
+
+
+def write_assets(extra_dirs=None):
+    """Regenerate mark, splash, SVG, and multi-size ICO / favicon assets."""
+    destinations = [_HERE]
+    if extra_dirs:
+        destinations.extend(extra_dirs)
+    for dest in destinations:
+        os.makedirs(dest, exist_ok=True)
+
+    mark_256 = _rounded(256, ACCENT, INK)
+    mark_png = _png(256, 256, mark_256)
+    splash = _png(960, 420, _splash_rgba(960, 420))
+    svg = mark_svg()
+
+    sizes = (16, 24, 32, 48, 64, 128, 256)
+    ico_frames = []
+    for size in sizes:
+        rgba = _rounded(size, ACCENT, INK)
+        ico_frames.append((size, _png(size, size, rgba)))
+    ico_bytes = _ico(ico_frames)
+
+    # File-type icon: same mark (suite convention); Windows associates .blend → this.
+    file_ico = ico_bytes
+
+    for dest in destinations:
+        with open(os.path.join(dest, "mark.png"), "wb") as handle:
+            handle.write(mark_png)
+        with open(os.path.join(dest, "mark-256.png"), "wb") as handle:
+            handle.write(mark_png)
+        with open(os.path.join(dest, "splash.png"), "wb") as handle:
+            handle.write(splash)
+        with open(os.path.join(dest, "mark.svg"), "w", encoding="utf-8") as handle:
+            handle.write(svg)
+        with open(os.path.join(dest, "app.ico"), "wb") as handle:
+            handle.write(ico_bytes)
+        with open(os.path.join(dest, "favicon.ico"), "wb") as handle:
+            handle.write(ico_bytes)
+        with open(os.path.join(dest, "file.ico"), "wb") as handle:
+            handle.write(file_ico)
+
+    return {
+        "mark_png": mark_png,
+        "ico": ico_bytes,
+        "svg": svg,
+        "splash": splash,
+    }
 
 
 def icon_id():
     """Preview icon for layout rows. Loaded on first draw, outside register()."""
     global _PREVIEWS
     import bpy
+    path = os.path.join(_HERE, "mark.png")
+    if not os.path.isfile(path):
+        write_assets()
     if _PREVIEWS is None:
         import bpy.utils.previews
         _PREVIEWS = bpy.utils.previews.new()
-        _PREVIEWS.load("mark", os.path.join(_HERE, "mark.png"), "IMAGE")
+        _PREVIEWS.load("mark", path, "IMAGE")
     return _PREVIEWS["mark"].icon_id
 
 
@@ -179,8 +309,60 @@ def _widget(widget, inner, text, inner_sel=None, text_sel=None, outline=None):
         widget.roundness = 0.4
 
 
-def apply_theme(context):
-    """Light suite shell: fog page, white bars, ink text, pastel green accent."""
+def is_dark(context):
+    scene = getattr(context, "scene", None)
+    if scene is not None and "oform_dark" in scene:
+        return bool(scene.get("oform_dark", False))
+    return False
+
+
+def set_dark(context, dark):
+    scene = getattr(context, "scene", None)
+    if scene is not None:
+        scene["oform_dark"] = bool(dark)
+
+
+def palette(dark):
+    """Shell + canvas colours for the active theme."""
+    if dark:
+        return {
+            "fog": FOG_DARK,
+            "soft": SOFT_DARK,
+            "surface": SURFACE_DARK,
+            "ink": INK_DARK,
+            "muted": MUTED_DARK,
+            "edge": EDGE_DARK,
+            "accent": ACCENT,
+            "accent_on": ACCENT_ON,
+            "select": SELECT_DARK,
+            "canvas": CANVAS_DARK,
+            "ai": AI_ACCENT_DARK,
+            "header": FOG_DARK,
+            "panel": SOFT_DARK,
+        }
+    return {
+        "fog": FOG,
+        "soft": SOFT,
+        "surface": WHITE,
+        "ink": INK,
+        "muted": MUTED,
+        "edge": EDGE,
+        "accent": ACCENT,
+        "accent_on": ACCENT_ON,
+        "select": SELECT,
+        "canvas": CANVAS_LIGHT,
+        "ai": AI_ACCENT,
+        "header": WHITE,
+        "panel": SOFT,
+    }
+
+
+def apply_theme(context, dark=None):
+    """O-Draft-aligned shell: graphite or off-white chrome, black/white canvas."""
+    if dark is None:
+        dark = is_dark(context)
+    set_dark(context, dark)
+    colors = palette(dark)
     theme = context.preferences.themes[0]
     ui = theme.user_interface
     names = (
@@ -194,58 +376,68 @@ def apply_theme(context):
         widget = getattr(ui, name, None)
         if widget is None or not hasattr(widget, "inner"):
             continue
-        if name in {"wcol_menu_back", "wcol_tooltip", "wcol_box"}:
-            _widget(widget, WHITE, INK)
-        else:
-            _widget(widget, WHITE, INK)
-    _paint(ui, "editor_border", _unit(EDGE))
-    _paint(ui, "editor_outline", (*_unit(EDGE), 1.0))
-    _paint(ui, "editor_outline_active", (*_unit(ACCENT_PRESS), 1.0))
-    _paint(ui, "widget_text_cursor", _unit(INK))
-    _paint(ui, "panel_header", (*_unit(WHITE), 1.0))
-    _paint(ui, "panel_title", _unit(INK))
-    _paint(ui, "panel_text", _unit(INK))
-    _paint(ui, "panel_back", (*_unit(WHITE), 1.0))
-    _paint(ui, "panel_sub_back", (*_unit(SOFT), 1.0))
-    _paint(ui, "panel_outline", (*_unit(EDGE), 1.0))
-    _paint(ui, "panel_active", (*_unit(ACCENT), 1.0))
+        _widget(
+            widget,
+            colors["surface"],
+            colors["ink"],
+            inner_sel=colors["accent_on"],
+            text_sel=INK if not dark else INK,
+            outline=colors["edge"],
+        )
+    _paint(ui, "editor_border", _unit(colors["edge"]))
+    _paint(ui, "editor_outline", (*_unit(colors["edge"]), 1.0))
+    _paint(ui, "editor_outline_active", (*_unit(colors["accent"]), 1.0))
+    _paint(ui, "widget_text_cursor", _unit(colors["ink"]))
+    _paint(ui, "panel_header", (*_unit(colors["header"]), 1.0))
+    _paint(ui, "panel_title", _unit(colors["ink"]))
+    _paint(ui, "panel_text", _unit(colors["ink"]))
+    _paint(ui, "panel_back", (*_unit(colors["panel"]), 1.0))
+    _paint(ui, "panel_sub_back", (*_unit(colors["soft"]), 1.0))
+    _paint(ui, "panel_outline", (*_unit(colors["edge"]), 1.0))
+    _paint(ui, "panel_active", (*_unit(colors["accent"]), 1.0))
     if hasattr(ui, "panel_roundness"):
-        ui.panel_roundness = 0.2
+        ui.panel_roundness = 0.15
 
     for space_name in ("topbar", "view_3d", "properties", "statusbar", "outliner", "preferences"):
         space = getattr(theme, space_name, None)
         if space is None:
             continue
-        colors = getattr(space, "space", space)
-        _paint(colors, "header", (*_unit(WHITE), 1.0))
-        _paint(colors, "header_text", _unit(INK))
-        _paint(colors, "header_text_hi", _unit(INK))
-        _paint(colors, "title", _unit(INK))
-        _paint(colors, "text", _unit(INK))
-        _paint(colors, "text_hi", _unit(INK))
-        _paint(colors, "back", _unit(SOFT if space_name == "properties" else FOG))
-        gradients = getattr(colors, "gradients", None)
+        slot = getattr(space, "space", space)
+        back = colors["panel"] if space_name == "properties" else colors["fog"]
+        header = colors["header"]
+        _paint(slot, "header", (*_unit(header), 1.0))
+        _paint(slot, "header_text", _unit(colors["ink"]))
+        _paint(slot, "header_text_hi", _unit(colors["ink"]))
+        _paint(slot, "title", _unit(colors["ink"]))
+        _paint(slot, "text", _unit(colors["ink"]))
+        _paint(slot, "text_hi", _unit(colors["ink"]))
+        _paint(slot, "back", _unit(back))
+        gradients = getattr(slot, "gradients", None)
         if gradients is not None and hasattr(gradients, "background_type"):
             try:
                 gradients.background_type = "SINGLE_COLOR"
             except (TypeError, ValueError):
                 pass
-            _paint(gradients, "high_gradient", _unit(FOG))
-            _paint(gradients, "gradient", _unit(FOG))
+            # SketchUp / O-Draft canvas: solid paper, independent of chrome.
+            canvas = colors["canvas"] if space_name == "view_3d" else colors["fog"]
+            _paint(gradients, "high_gradient", _unit(canvas))
+            _paint(gradients, "gradient", _unit(canvas))
 
     view = getattr(theme, "view_3d", None)
     if view is not None:
-        _paint(view, "wire", _unit(MUTED))
-        _paint(view, "wire_edit", _unit(INK))
-        _paint(view, "vertex", _unit(INK))
-        _paint(view, "vertex_select", _unit(SELECT))
-        _paint(view, "edge_select", _unit(SELECT))
-        _paint(view, "face", (*_unit(WHITE), 0.0))
-        _paint(view, "face_select", (*_unit(ACCENT), 0.55))
-        _paint(view, "face_mode_select", (*_unit(ACCENT), 0.55))
-        _paint(view, "grid", _unit(EDGE))
-        _paint(view, "object_selected", _unit(SELECT))
-        _paint(view, "object_active", _unit(SELECT))
+        wire = colors["muted"] if not dark else (160, 160, 160)
+        _paint(view, "wire", _unit(wire))
+        _paint(view, "wire_edit", _unit(colors["ink"]))
+        _paint(view, "vertex", _unit(colors["ink"]))
+        _paint(view, "vertex_select", _unit(colors["select"]))
+        _paint(view, "edge_select", _unit(colors["select"]))
+        face_fill = colors["canvas"]
+        _paint(view, "face", (*_unit(face_fill), 0.0))
+        _paint(view, "face_select", (*_unit(colors["accent"]), 0.45))
+        _paint(view, "face_mode_select", (*_unit(colors["accent"]), 0.45))
+        _paint(view, "grid", _unit(colors["edge"]))
+        _paint(view, "object_selected", _unit(colors["select"]))
+        _paint(view, "object_active", _unit(colors["select"]))
 
     font = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "segoeui.ttf")
     preferences = getattr(context.preferences, "view", None)

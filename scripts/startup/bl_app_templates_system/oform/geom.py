@@ -129,6 +129,21 @@ def circle_points(center, radius, normal, segments):
     return pts
 
 
+def polygon_points(center, radius, normal, sides):
+    """Regular polygon on the plane (SketchUp Polygon tool)."""
+    return circle_points(center, radius, normal, max(3, int(sides)))
+
+
+def freehand_points(points):
+    """Deduplicate nearly-identical samples for the Freehand tool."""
+    out = []
+    for co in points:
+        p = Vector(co)
+        if not out or (p - out[-1]).length > 1e-4:
+            out.append(p)
+    return out
+
+
 def arc_points(start, end, bulge, segments=12):
     """Polyline from start to end bowed through bulge. Endpoints are included."""
     p0 = Vector(start)
@@ -625,11 +640,19 @@ def selected_face(bm, face_index=-1):
     return None
 
 
-def push_pull(bm, face, distance):
+def push_pull(bm, face, distance, copy=False):
     if face is None or not face.is_valid or abs(distance) < 1e-9:
         return None
     normal = face.normal.copy()
-    ret = bmesh.ops.extrude_discrete_faces(bm, faces=[face])
+    working = face
+    if copy:
+        # SketchUp Ctrl+Push/Pull leaves the original face and extrudes a copy.
+        dup = bmesh.ops.duplicate(bm, geom=[face])
+        faces = [ele for ele in dup.get("geom", []) if isinstance(ele, bmesh.types.BMFace)]
+        if not faces:
+            return None
+        working = faces[0]
+    ret = bmesh.ops.extrude_discrete_faces(bm, faces=[working])
     faces = ret.get("faces") or []
     if not faces:
         return None
@@ -638,6 +661,123 @@ def push_pull(bm, face, distance):
     _ensure(bm)
     _select_only_face(bm, top)
     return top
+
+
+def add_polyline(bm, points, close=False, tol=TOL):
+    pts = [Vector(p) for p in points]
+    if len(pts) < 2:
+        return []
+    created = []
+    for i in range(len(pts) - 1):
+        created.append(add_segment(bm, pts[i], pts[i + 1], tol=tol))
+    if close and len(pts) > 2:
+        created.append(add_segment(bm, pts[-1], pts[0], tol=tol))
+    _ensure(bm)
+    return created
+
+
+def add_guide(bm, a, b, extend=10.0, tol=TOL):
+    """Construction line through a–b, extended both ways (SketchUp Tape Measure guide)."""
+    p0 = Vector(a)
+    p1 = Vector(b)
+    direction = p1 - p0
+    if direction.length < 1e-8:
+        return None
+    direction.normalize()
+    start = p0 - direction * extend
+    end = p1 + direction * extend
+    return add_segment(bm, start, end, tol=tol)
+
+
+def ordered_path_coords(edges):
+    """Walk selected edges into an ordered polyline of coordinates."""
+    valid = [edge for edge in edges if edge is not None and edge.is_valid]
+    if not valid:
+        return []
+    adj = {}
+    for edge in valid:
+        a, b = edge.verts
+        adj.setdefault(a, []).append((b, edge))
+        adj.setdefault(b, []).append((a, edge))
+    ends = [vert for vert, nbrs in adj.items() if len(nbrs) == 1]
+    start = ends[0] if ends else valid[0].verts[0]
+    path = [start]
+    used = set()
+    while True:
+        current = path[-1]
+        nxt = None
+        for other, edge in adj.get(current, []):
+            if edge.index in used:
+                continue
+            used.add(edge.index)
+            nxt = other
+            break
+        if nxt is None:
+            break
+        path.append(nxt)
+        if len(used) >= len(valid):
+            break
+    return [vert.co.copy() for vert in path]
+
+
+def follow_me(bm, face, path_coords):
+    """Extrude a face along an ordered path (SketchUp Follow Me, straight/bent paths)."""
+    if face is None or not face.is_valid or len(path_coords) < 2:
+        return None
+    coords = [Vector(p) for p in path_coords]
+    current = face
+    # Place the profile at the path start.
+    center = current.calc_center_median()
+    bmesh.ops.translate(bm, verts=list(current.verts), vec=coords[0] - center)
+    _ensure(bm)
+    for i in range(len(coords) - 1):
+        delta = coords[i + 1] - coords[i]
+        length = delta.length
+        if length < 1e-9:
+            continue
+        direction = delta.normalized()
+        # Align a face edge direction toward the path when the path bends.
+        if i > 0:
+            prev = (coords[i] - coords[i - 1]).normalized()
+            axis = prev.cross(direction)
+            if axis.length > 1e-8:
+                axis.normalize()
+                angle = prev.angle(direction)
+                rot = Matrix.Rotation(angle, 4, axis)
+                pivot = coords[i]
+                for vert in current.verts:
+                    vert.co = pivot + rot @ (vert.co - pivot)
+                _ensure(bm)
+        ret = bmesh.ops.extrude_discrete_faces(bm, faces=[current])
+        faces = ret.get("faces") or []
+        if not faces:
+            break
+        current = faces[0]
+        bmesh.ops.translate(bm, verts=list(current.verts), vec=direction * length)
+        _ensure(bm)
+    _select_only_face(bm, current)
+    return current
+
+
+def soften_edges(bm, edges, smooth=True):
+    for edge in edges:
+        if edge is None or not edge.is_valid:
+            continue
+        edge.smooth = smooth
+
+
+def hide_edges(bm, edges, hide=True):
+    for edge in edges:
+        if edge is None or not edge.is_valid:
+            continue
+        edge.hide = hide
+        if hide:
+            for vert in edge.verts:
+                if all(e.hide for e in vert.link_edges):
+                    vert.hide = True
+        else:
+            for vert in edge.verts:
+                vert.hide = False
 
 
 def offset_face(bm, face, distance):
@@ -669,6 +809,26 @@ def erase_edges(bm, edges):
         return
     bmesh.ops.dissolve_edges(bm, edges=valid, use_verts=True, use_face_split=False)
     _ensure(bm)
+
+
+def delete_selected(bm):
+    """Remove selected faces, then edges, then verts (SketchUp Delete)."""
+    faces = [face for face in bm.faces if face.select]
+    if faces:
+        bmesh.ops.delete(bm, geom=faces, context="FACES")
+        _ensure(bm)
+        return True
+    edges = [edge for edge in bm.edges if edge.select]
+    if edges:
+        bmesh.ops.delete(bm, geom=edges, context="EDGES")
+        _ensure(bm)
+        return True
+    verts = [vert for vert in bm.verts if vert.select]
+    if verts:
+        bmesh.ops.delete(bm, geom=verts, context="VERTS")
+        _ensure(bm)
+        return True
+    return False
 
 
 def translate_verts(verts, delta):

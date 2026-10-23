@@ -178,6 +178,113 @@ def _run(obj):
     if not heights or any(abs(height) > 1e-3 for height in heights):
         _fail("undo did not restore z=0: " + str(heights))
 
+    # SketchUp-style polygon action (regular hex).
+    result = bpy.ops.oform.polygon(
+        True,
+        center=(0.0, 0.0, 0.0),
+        radius=1.0,
+        normal=(0.0, 0.0, 1.0),
+        sides=6,
+    )
+    if "FINISHED" not in result:
+        _fail("polygon returned " + str(set(result)))
+
+    # Groups / components: select all faces, make component, enter, exit, explode.
+    import bmesh
+    import groups as groups_mod
+
+    bm = bmesh.from_edit_mesh(obj.data)
+    for face in bm.faces:
+        face.select = True
+    for edge in bm.edges:
+        edge.select = True
+    for vert in bm.verts:
+        vert.select = True
+    bmesh.update_edit_mesh(obj.data)
+
+    result = bpy.ops.oform.make_component(True, definition="SelftestComp")
+    if "FINISHED" not in result:
+        _fail("make_component returned " + str(set(result)))
+    entity = groups_mod.get_entity(bpy.context)
+    if entity is None:
+        _fail("make_component did not select the new component")
+    if groups_mod.kind_of(entity) != groups_mod.KIND_COMPONENT:
+        _fail("new object is not a component")
+
+    result = bpy.ops.oform.enter_group(True)
+    if "FINISHED" not in result:
+        _fail("enter_group returned " + str(set(result)))
+    if groups_mod.context_depth(bpy.context) < 1:
+        _fail("enter_group did not push context")
+    if groups_mod.context_object(bpy.context) != entity:
+        _fail("enter_group did not activate the component")
+
+    result = bpy.ops.oform.exit_group(True)
+    if "FINISHED" not in result:
+        _fail("exit_group returned " + str(set(result)))
+    if groups_mod.context_depth(bpy.context) != 0:
+        _fail("exit_group did not restore root context")
+
+    entity_name = entity.name
+    groups_mod.set_entity(bpy.context, entity)
+    result = bpy.ops.oform.explode(True)
+    if "FINISHED" not in result:
+        _fail("explode returned " + str(set(result)))
+    if bpy.data.objects.get(entity_name) is not None:
+        _fail("explode left the component object behind")
+
+    # Theme + Ask (O-Draft shell).
+    import ai as ask
+    import brand
+
+    result = bpy.ops.oform.toggle_theme(True, mode="DARK")
+    if "FINISHED" not in result:
+        _fail("toggle_theme dark returned " + str(set(result)))
+    if not brand.is_dark(bpy.context):
+        _fail("dark theme flag not set")
+    result = bpy.ops.oform.toggle_theme(True, mode="LIGHT")
+    if "FINISHED" not in result:
+        _fail("toggle_theme light returned " + str(set(result)))
+    phase, _msg = ask.propose(bpy.context, "model summary")
+    if phase != "idle":
+        _fail("ask summary should be idle, got " + phase)
+
+    # Working plane + selection + solids foundation.
+    import inference
+    import selection
+    import solids
+    from mathutils import Vector
+
+    plane = inference.WorkingPlane(Vector((0, 0, 1)), Vector((0, 0, 1)), "face")
+    hit = inference.ray_plane_intersect(
+        Vector((0, 0, 5)), Vector((0, 0, -1)), plane
+    )
+    if hit is None or abs(hit.z - 1.0) > 1e-5:
+        _fail("ray_plane_intersect failed: " + str(hit))
+
+    tracker = selection.ClickTracker()
+    if tracker.register((10, 10)) != 1:
+        _fail("ClickTracker first click should be 1")
+    if tracker.register((10, 10)) != 2:
+        _fail("ClickTracker second click should be 2")
+    if tracker.register((10, 10)) != 3:
+        _fail("ClickTracker third click should be 3")
+
+    # Two unit cubes → Boolean union must succeed.
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.mesh.primitive_cube_add(size=2.0, location=(0.0, 0.0, 0.0))
+    cube_a = bpy.context.view_layer.objects.active
+    bpy.ops.mesh.primitive_cube_add(size=2.0, location=(1.0, 0.0, 0.0))
+    cube_b = bpy.context.view_layer.objects.active
+    cube_a.select_set(True)
+    cube_b.select_set(True)
+    bpy.context.view_layer.objects.active = cube_a
+    ok, message = solids.boolean_objects(bpy.context, cube_a, cube_b, "UNION")
+    if not ok:
+        _fail("boolean union failed: " + message)
+    if not hasattr(bpy.ops.oform, "boolean_union"):
+        _fail("oform.boolean_union was not registered")
+
 
 def main():
     import bpy
@@ -185,6 +292,28 @@ def main():
     _load_template()
     if not hasattr(bpy.ops.oform, "rectangle"):
         _fail("oform.rectangle was not registered")
+    for name in (
+        "polygon",
+        "tape",
+        "follow_me",
+        "freehand",
+        "tool_tape",
+        "make_component",
+        "make_group",
+        "explode",
+        "enter_group",
+        "exit_group",
+        "toggle_theme",
+        "ask_submit",
+        "boolean",
+        "boolean_union",
+        "boolean_subtract",
+        "boolean_intersect",
+        "solid_inspect",
+        "delete_selection",
+    ):
+        if not hasattr(bpy.ops.oform, name):
+            _fail("oform." + name + " was not registered")
 
     override = _override()
     if override is None:
