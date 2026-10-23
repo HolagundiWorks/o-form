@@ -31,9 +31,21 @@ This is a **repository evidence review**, not a formal legal opinion. Unresolved
 4. **Complete third-party audit:** `release/license/license.md` is large; this pass did not re-verify every library version against the Windows `lib/windows_x64` snapshot.
 5. **Contributor CLA / DCO:** No project-specific contributor agreement was found. Contribution process for O-Form-specific patches is documented in `CONTRIBUTING.md` without inventing a CLA.
 
+## Licensing policy pass (same day)
+
+Added without replacing canonical GPL/third-party texts:
+
+- Root `LICENSE` (O-Form statement → `GPL-2.0-or-later` / `doc/license/GPL-license.txt`)
+- Root `NOTICE` (attribution index)
+- Root `THIRD_PARTY_LICENSES.md` (pointer to `release/license/`, documents `license.md` vs `COPYING` wording conflict)
+- `docs/licensing/policy.md`
+
+`COPYING`, `doc/license/*`, and `release/license/*` remain the authoritative shipped texts.
+
 ## Guidance for future edits
 
 - Prefer adding O-Form notices **alongside** Blender notices.
 - Never delete third-party license files to “clean” branding.
 - Never claim SketchUp, Trimble, or Blender Foundation affiliation.
+- Never advertise a new project license until compatibility with inherited GPL code is reviewed.
 - When unsure, leave the legal file unchanged and record the question here.

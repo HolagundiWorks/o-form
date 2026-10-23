@@ -15,6 +15,12 @@
 - [ ] `oform` selftest prints `OFORM_SELFTEST_OK` (if mesh/tools touched)
 - [ ] Manual launch of `oform.exe` (if UI/branding touched)
 - [ ] Documentation links checked (if docs touched)
+- [ ] `python tools/oform_check_independence.py` exits 0 (if remotes/docs/automation touched)
+
+## Independence
+
+- [ ] No Blender upstream remote added
+- [ ] No upstream fetch/merge/rebase/sync workflow introduced
 
 ## Licensing
 

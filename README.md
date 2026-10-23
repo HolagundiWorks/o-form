@@ -4,7 +4,7 @@
 
 O-Form is the 3D modelling application in **OSAS** (Open Source Architecture Suit), developed by [Human Centric Works](https://github.com/HolagundiWorks).
 
-It is a **clone of [Blender](https://www.blender.org) 5.2.3 LTS**: the full source tree lives here as an independent repository (no Blender upstream remote). The mesh kernel, `.blend` files, and internal build targets stay Blender’s. The product surface is push/pull solid modelling for architectural workflows—one active tool, a left tool pane, axis locks, and a measurements box.
+It is a **clone of [Blender](https://www.blender.org) 5.2.3 LTS**: the full source tree lives here as an independent repository. **No Blender upstream remote, merges, or synchronization** — see the [developer guide](docs/developer/architecture.md). The mesh kernel, `.blend` files, and internal build targets stay Blender’s. The product surface is push/pull solid modelling for architectural workflows—one active tool, a left tool pane, axis locks, and a measurements box.
 
 | | |
 | --- | --- |
@@ -16,7 +16,7 @@ It is a **clone of [Blender](https://www.blender.org) 5.2.3 LTS**: the full sour
 | Repository | [github.com/HolagundiWorks/o-form](https://github.com/HolagundiWorks/o-form) |
 | Branch | `main` |
 | Files | `.blend` (export: Wavefront OBJ, glTF) |
-| License | GNU GPL v2 or later ([COPYING](COPYING)) |
+| License | GNU GPL v2 or later ([LICENSE](LICENSE), [COPYING](COPYING)) |
 
 O-Form is **not** affiliated with the Blender Foundation or with Trimble. It does not use SketchUp files, icons, or artwork. It does **not** claim BIM/IFC certification, SketchUp file compatibility, or production readiness beyond what is listed below.
 
@@ -26,7 +26,8 @@ O-Form is **not** affiliated with the Blender Foundation or with Trimble. It doe
 | --- | --- |
 | Documentation index | [docs/README.md](docs/README.md) |
 | User overview | [docs/user/overview.md](docs/user/overview.md) |
-| Developer architecture | [docs/developer/architecture.md](docs/developer/architecture.md) |
+| Developer guide | [docs/developer/architecture.md](docs/developer/architecture.md) |
+| Releases | [docs/developer/releases.md](docs/developer/releases.md) |
 | Windows build | [docs/build/windows.md](docs/build/windows.md) |
 | Licensing / attribution | [docs/licensing/attribution.md](docs/licensing/attribution.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
@@ -102,6 +103,18 @@ Prints `OFORM_SELFTEST_OK` on success.
 
 ## License and attribution
 
-Same terms as Blender: **GNU GPL v2 or later**. See [COPYING](COPYING), [doc/license/GPL-license.txt](doc/license/GPL-license.txt), and [docs/licensing/attribution.md](docs/licensing/attribution.md). Third-party notices: [release/license/license.md](release/license/license.md). There is no warranty.
+O-Form is open source. As a modified Blender distribution it remains under the **GNU GPL, version 2 or later** (`GPL-2.0-or-later`). That is verified from `COPYING`, `doc/license/GPL-license.txt`, and source SPDX headers — not invented for branding.
 
-Blender author credits remain in [AUTHORS](AUTHORS). Do not remove upstream copyright headers.
+| Document | Purpose |
+| --- | --- |
+| [LICENSE](LICENSE) | Project license statement |
+| [COPYING](COPYING) | Retained Blender pointer to the GPL text |
+| [NOTICE](NOTICE) | Attribution index |
+| [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) | Pointer to third-party inventory |
+| [doc/license/GPL-license.txt](doc/license/GPL-license.txt) | Full GPL-2 text |
+| [docs/licensing/policy.md](docs/licensing/policy.md) | Licensing policy |
+| [docs/licensing/attribution.md](docs/licensing/attribution.md) | File map |
+| [release/license/license.md](release/license/license.md) | Bundled third-party notices |
+| [AUTHORS](AUTHORS) | Blender author credits (do not remove) |
+
+There is no warranty. Independent development (no Blender upstream) does not cancel GPL obligations. Do not remove copyright headers or advertise a conflicting license for inherited code.

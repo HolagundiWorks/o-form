@@ -1,0 +1,51 @@
+O-Form open-source license
+==========================
+
+SPDX-License-Identifier: GPL-2.0-or-later
+
+O-Form is an open-source 3D modelling application within OSAS (Open Source
+Architecture Suit). This repository is a modified distribution of Blender
+5.2.3 LTS and is therefore a derivative work under the GNU General Public
+License.
+
+Verified project license (inherited Blender code and O-Form modifications
+that use the same SPDX identifier)
+----------------------------------------------------------------------
+
+GNU General Public License, version 2 or later (GPL-2.0-or-later).
+
+Canonical full license text (do not replace this file with a conflicting
+license):
+
+  doc/license/GPL-license.txt
+
+Blender project convention pointer (retained):
+
+  COPYING
+
+Packaged copyright notice shipped with builds:
+
+  release/text/copyright.txt
+
+Third-party and bundled component notices:
+
+  release/license/license.md
+  release/license/licenses.json
+  THIRD_PARTY_LICENSES.md
+  NOTICE
+
+Explanatory guidance (not a substitute for the texts above):
+
+  docs/licensing/
+
+There is no warranty. See the GPL text for details.
+
+O-Form branding identifies the product. It does not transfer ownership of
+inherited Blender code or third-party contributions, and it does not make
+O-Form an official Blender Foundation product.
+
+Copyright in inherited Blender material remains with the Blender Authors /
+Blender Foundation and other listed copyright holders (see AUTHORS).
+O-Form-specific modifications carry copyright notices in their file headers
+(typically "O-Form Authors" / Human Centric Works) under GPL-2.0-or-later
+unless a file states otherwise.

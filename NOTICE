@@ -1,0 +1,40 @@
+O-Form NOTICE
+=============
+
+This file indexes required attribution. It does not replace license texts.
+
+Product
+-------
+O-Form — 3D modelling (OSAS, Open Source Architecture Suit)
+Developer: Human Centric Works · Hospet
+Source: https://github.com/HolagundiWorks/o-form
+
+Primary license
+---------------
+GNU GPL version 2 or later — see LICENSE, COPYING, and
+doc/license/GPL-license.txt.
+
+Inherited Blender copyright
+---------------------------
+Blender Authors / Blender Foundation — see AUTHORS and per-file
+SPDX-FileCopyrightText headers. Do not remove these notices.
+
+Packaged copyright blurb
+------------------------
+release/text/copyright.txt
+
+Third-party libraries and fonts
+-------------------------------
+release/license/license.md
+release/license/licenses.json
+See also THIRD_PARTY_LICENSES.md.
+
+End-user readme
+---------------
+release/text/readme.html
+
+Independence and provenance
+---------------------------
+O-Form is developed without a Blender upstream remote or upstream merge
+workflow. That independence does not cancel GPL obligations, attribution,
+or source-distribution requirements applicable to inherited code.
