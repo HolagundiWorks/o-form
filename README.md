@@ -1,25 +1,58 @@
 # O-Form
 
-**O-Form is a clone of [Blender](https://www.blender.org) 5.2.3 LTS.**
+**Open Source. Built for Architects. Driven by Community.**
 
-This repository is that Blender tree, kept as its own project with no Blender upstream remote. The mesh kernel, `.blend` files, and internal build targets stay Blender’s. The product surface is push/pull solid modeling: one active tool, a left tool pane, axis locks, and a measurements box.
+O-Form is the 3D modelling application in **OSAS** (Open Source Architecture Suit), developed by [Human Centric Works](https://github.com/HolagundiWorks).
+
+It is a **clone of [Blender](https://www.blender.org) 5.2.3 LTS**: the full source tree lives here as an independent repository (no Blender upstream remote). The mesh kernel, `.blend` files, and internal build targets stay Blender’s. The product surface is push/pull solid modelling for architectural workflows—one active tool, a left tool pane, axis locks, and a measurements box.
 
 | | |
 | --- | --- |
 | Product | O-Form |
-| Role | Modeling |
+| Category | 3D modelling |
 | Suite | OSAS · Open Source Architecture Suit |
+| Related | O-Studio, O-CoreOp, O-Draft |
 | Developer | Human Centric Works · Hospet |
 | Repository | [github.com/HolagundiWorks/o-form](https://github.com/HolagundiWorks/o-form) |
 | Branch | `main` |
 | Files | `.blend` (export: Wavefront OBJ, glTF) |
 | License | GNU GPL v2 or later ([COPYING](COPYING)) |
 
-O-Form is not affiliated with the Blender Foundation or with Trimble. It does not use SketchUp files, icons, or artwork.
+O-Form is **not** affiliated with the Blender Foundation or with Trimble. It does not use SketchUp files, icons, or artwork. It does **not** claim BIM/IFC certification, SketchUp file compatibility, or production readiness beyond what is listed below.
+
+## Documentation
+
+| Guide | Link |
+| --- | --- |
+| Documentation index | [docs/README.md](docs/README.md) |
+| User overview | [docs/user/overview.md](docs/user/overview.md) |
+| Developer architecture | [docs/developer/architecture.md](docs/developer/architecture.md) |
+| Windows build | [docs/build/windows.md](docs/build/windows.md) |
+| Licensing / attribution | [docs/licensing/attribution.md](docs/licensing/attribution.md) |
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
+
+## Status (verified in this tree)
+
+**Implemented**
+
+- Windows lite build target `make oform 2022b` → `oform.exe`
+- App template with suite branding (pastel green accent)
+- Tools: Select, Eraser, Paint, Line, Arc, Rectangle, Circle, Push/Pull, Offset, Move, Rotate, Scale, Orbit, Pan, Zoom, Zoom Extents
+- Axis locks, typed measurements, basic inference (endpoint, midpoint, on edge, on face, axis)
+- Face split when drawing a closed shape on a face
+- Headless selftest (`OFORM_SELFTEST_OK`)
+- OBJ export (CMake); glTF via `io_scene_gltf2`
+
+**Not implemented / out of scope for now**
+
+- Follow Me, Tape Measure, Groups, Components
+- Full parallel / perpendicular / intersection inference
+- Verified macOS/Linux product packages
+- Replacement of all Blender chrome icons inside the executable
 
 ## Branding
 
-O-Form is part of **OSAS**, the Open Source Architecture Suit, alongside O-Studio, O-CoreOp, and O-Draft. Identity lives in `scripts/startup/bl_app_templates_system/oform/brand.py`.
+Identity module: `scripts/startup/bl_app_templates_system/oform/brand.py`.
 
 | Token | Value |
 | --- | --- |
@@ -29,102 +62,46 @@ O-Form is part of **OSAS**, the Open Source Architecture Suit, alongside O-Studi
 | Suite | OSAS · Open Source Architecture Suit |
 | Credit | Developed by Human Centric Works · Hospet |
 | Origin | A clone of Blender |
+| Accent | Pastel green `#C6E6D3` (ink arcs `#17181B`) |
 
-**Mark.** Same suite geometry as the other apps (left half-ring, lower half-ring, centre ring) on a rounded plate. Sister apps use a saturated plate with white arcs. O-Form’s plate is pastel green `#C6E6D3`; arcs are suite ink `#17181B` so they stay readable.
+## Layout and tools
 
-**Shell.** Light suite chrome: page fog `#F2F4F7`, navigation soft `#ECEEF2`, white bars, ink text, edge `#D0D4DC`. Selected controls use `#8FCBAA`; viewport selection uses `#3FA36A`. UI font prefers Segoe UI when present.
+See [docs/user/overview.md](docs/user/overview.md) for the workspace, shortcuts, and inference notes.
 
-**Assets.** `mark.png` (suite mark) and `splash.png` (lockup) ship with the app template.
-
-## What this clone changes
-
-Almost all product UI and tools live in:
+Product code lives mainly in:
 
 ```
 scripts/startup/bl_app_templates_system/oform/
 ```
 
-Windows lite config: `build_files/cmake/config/oform.cmake`  
-Build target: `make oform 2022b` → `oform.exe` (copy of `blender.exe`)
+Lite config: `build_files/cmake/config/oform.cmake`.  
+`--app-template default` opens the unmodified Blender layout from the same binary.
 
-Launching `oform.exe` opens the O-Form template. `--app-template default` starts the unmodified Blender layout from the same binary.
+## Build (Windows)
 
-## Layout
-
-The first window is a single editable mesh named `Model`, already in edit mode. Tab does not leave edit mode.
-
-- Menu bar: File, Edit, View, Camera, Draw, Tools, Window, Help
-- Left pane: tools grouped as Select, Draw, Edit, and View
-- Work area: one 3D view (perspective, Z-up, RGB axes, ground grid)
-- Status strip: tool hint, measurements box, and Human Centric Works · Hospet
-
-Navigation: middle mouse orbits, Shift+middle mouse pans, wheel zooms. Camera menu: Top, Front, Right, Iso, perspective, parallel, zoom extents.
-
-## Tools
-
-| Tool | Key |
-| --- | --- |
-| Select | Space |
-| Eraser | E |
-| Paint | B |
-| Line | L |
-| Arc | A |
-| Rectangle | R |
-| Circle | C |
-| Push/Pull | P |
-| Offset | F |
-| Move | M |
-| Rotate | Q |
-| Scale | S |
-| Orbit | O |
-| Pan | H |
-| Zoom | Z |
-| Zoom Extents | Shift+Z |
-
-Arrow keys during a tool: Right locks red (X), Left locks green (Y), Up locks blue (Z), Down locks parallel to the inferred edge. Type a length and press Enter. A rectangle accepts `width, depth`. A circle accepts a segment count such as `24s`, then a radius.
-
-Drawing a closed shape on a face splits that face so the inner face can be pushed or pulled. Inference this release covers endpoints, midpoints, on-edge, on-face, and axis direction. Ctrl+Z and Ctrl+S stay available.
-
-Out of scope for now: Follow Me, Tape Measure, Groups, Components, and full parallel/perpendicular/intersection inference.
-
-## License
-
-Same terms as Blender: GNU General Public License, version 2 or later. See [COPYING](COPYING) and [doc/license/GPL-license.txt](doc/license/GPL-license.txt). There is no warranty.
-
-## Build on Windows
-
-The source path cannot contain spaces. This tree is meant to live at `D:\o-form`.
-
-Requirements: Git, CMake, and Visual Studio 2022 Build Tools with the C++ workload.
+Path must not contain spaces (`D:\o-form` recommended). From `cmd.exe`:
 
 ```
 git clone https://github.com/HolagundiWorks/o-form.git D:\o-form
 cd /d D:\o-form
-```
-
-From `cmd.exe` in this directory:
-
-```
 make update
 make oform 2022b
 ```
 
-`make update` downloads the prebuilt Windows libraries (same library layout Blender uses). `make oform` configures the lite modeling build (Cycles, compositing, and video codecs stay off; OBJ export stays on) and compiles it.
+Binary: `D:\build_windows_OForm_x64_vc17_Release\bin\Release\oform.exe`
 
-The application binary is `oform.exe`, next to `blender.exe`:
+Full steps: [docs/build/windows.md](docs/build/windows.md).
 
-```
-D:\build_windows_OForm_x64_vc17_Release\bin\Release\oform.exe
-```
-
-Python-only template edits under `scripts/startup/bl_app_templates_system/oform/` can be copied into that install tree’s matching `5.2\scripts\...` path without a full C++ rebuild. Delete `__pycache__` after copying.
-
-## Check the mesh tools
-
-After the binary exists:
+## Selftest
 
 ```
 oform.exe --background --factory-startup --python scripts\startup\bl_app_templates_system\oform\selftest.py
 ```
 
-The script draws a rectangle, splits it with a second rectangle, push/pulls the inner face, undoes, and prints `OFORM_SELFTEST_OK`.
+Prints `OFORM_SELFTEST_OK` on success.
+
+## License and attribution
+
+Same terms as Blender: **GNU GPL v2 or later**. See [COPYING](COPYING), [doc/license/GPL-license.txt](doc/license/GPL-license.txt), and [docs/licensing/attribution.md](docs/licensing/attribution.md). Third-party notices: [release/license/license.md](release/license/license.md). There is no warranty.
+
+Blender author credits remain in [AUTHORS](AUTHORS). Do not remove upstream copyright headers.

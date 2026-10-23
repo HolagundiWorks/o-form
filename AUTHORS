@@ -1,5 +1,9 @@
 # This is the list of Blender authors for copyright purposes.
 #
+# O-Form is a clone of Blender maintained by Human Centric Works (OSAS).
+# Do not remove Blender author entries when attributing O-Form product work;
+# record O-Form-specific authorship in file SPDX headers and git history.
+#
 # This does not necessarily list everyone who has contributed code.
 # To see the full list of contributors, see the revision history in source
 # control.

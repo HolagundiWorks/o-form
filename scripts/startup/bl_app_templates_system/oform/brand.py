@@ -33,6 +33,7 @@ SELECT = (63, 163, 106)     # #3FA36A selection / outline_sel
 PRODUCT = "O-Form"
 SUBTITLE = "Modeling"
 TAGLINE = "Push/pull solid modeling"
+PRINCIPLE = "Open Source. Built for Architects. Driven by Community."
 SUITE = "OSAS · Open Source Architecture Suit"
 SUITE_FULL = "OSAS, the Open Source Architecture Suit"
 DEVELOPER = "Human Centric Works"
