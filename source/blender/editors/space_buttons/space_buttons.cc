@@ -11,6 +11,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_scene_types.h"
+#include "DNA_userdef_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_space_types.h"
 #include "DNA_view2d_types.h"
@@ -89,6 +90,10 @@ static SpaceLink *buttons_create(const ScrArea * /*area*/, const Scene * /*scene
   BLI_addtail(&sbuts->regionbase, region);
   region->regiontype = RGN_TYPE_NAV_BAR;
   region->alignment = RGN_ALIGN_LEFT;
+  /* O-Form's left pane is the tool list, not Blender's property tabs. */
+  if (STREQ(U.app_template, "oform")) {
+    region->flag |= RGN_FLAG_HIDDEN;
+  }
 
 #if 0
   /* context region */

@@ -32,6 +32,9 @@ if NOT "%1" == "" (
 	) else if "%1" == "lite" (
 		set TARGET=Lite
 		set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% -C"%BLENDER_DIR%\build_files\cmake\config\blender_lite.cmake"
+	) else if "%1" == "oform" (
+		set TARGET=OForm
+		set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% -C"%BLENDER_DIR%\build_files\cmake\config\oform.cmake"
 	) else if "%1" == "cycles" (
 		set TARGET=Cycles
 		set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% -C"%BLENDER_DIR%\build_files\cmake\config\cycles_standalone.cmake"

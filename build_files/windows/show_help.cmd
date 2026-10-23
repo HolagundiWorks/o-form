@@ -3,6 +3,7 @@ echo Convenience targets
 echo - release ^(identical to the official blender.org builds^)
 echo - full ^(same as release minus the cuda kernels^)
 echo - lite
+echo - oform ^(lite modeling build used by O-Form^)
 echo - headless
 echo - cycles
 echo - bpy

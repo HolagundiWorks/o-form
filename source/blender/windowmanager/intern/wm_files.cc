@@ -1173,7 +1173,12 @@ void WM_init_state_app_template_set(const char *app_template)
 
 const char *WM_init_state_app_template_get()
 {
-  return wm_init_state_app_template.override ? wm_init_state_app_template.app_template : nullptr;
+  if (wm_init_state_app_template.override) {
+    return wm_init_state_app_template.app_template;
+  }
+  /* O-Form opens the modeling template unless --app-template sets another one.
+   * "--app-template default" still clears it, because that sets the override. */
+  return "oform";
 }
 
 /** \} */

@@ -19,6 +19,7 @@
 #include "BLT_translation.hh"
 
 #include "DNA_armature_types.h"
+#include "DNA_userdef_types.h"
 #include "DNA_collection_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_material_types.h"
@@ -1270,6 +1271,10 @@ int /*eContextResult*/ buttons_context(const bContext *C,
 
 static bool buttons_panel_context_poll(const bContext *C, PanelType * /*pt*/)
 {
+  /* O-Form draws its own pane header. The Scene path and pin are the properties editor's. */
+  if (STREQ(U.app_template, "oform")) {
+    return false;
+  }
   SpaceProperties *sbuts = CTX_wm_space_properties(C);
   return sbuts->mainb != BCONTEXT_TOOL;
 }

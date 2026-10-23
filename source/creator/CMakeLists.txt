@@ -2110,6 +2110,15 @@ if(WIN32 AND NOT WITH_PYTHON_MODULE)
     PROPERTIES
       VS_USER_PROPS "blender.Cpp.user.props"
   )
+  # Ship oform.exe beside blender.exe. Internal target names stay Blender's so
+  # the build scripts keep working. oform.exe is the same binary.
+  add_custom_command(
+    TARGET blender POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:blender>
+            $<TARGET_FILE_DIR:blender>/oform.exe
+    COMMENT "Copy blender executable to oform.exe"
+  )
 endif()
 
 # -----------------------------------------------------------------------------
