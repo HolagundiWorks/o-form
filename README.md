@@ -11,7 +11,7 @@ This repository is that Blender tree, kept as its own project with no Blender up
 | Suite | OSAS · Open Source Architecture Suit |
 | Developer | Human Centric Works · Hospet |
 | Repository | [github.com/HolagundiWorks/o-form](https://github.com/HolagundiWorks/o-form) |
-| Branch | `oform` |
+| Branch | `main` |
 | Files | `.blend` (export: Wavefront OBJ, glTF) |
 | License | GNU GPL v2 or later ([COPYING](COPYING)) |
 
@@ -100,7 +100,6 @@ Requirements: Git, CMake, and Visual Studio 2022 Build Tools with the C++ worklo
 ```
 git clone https://github.com/HolagundiWorks/o-form.git D:\o-form
 cd /d D:\o-form
-git checkout oform
 ```
 
 From `cmd.exe` in this directory:

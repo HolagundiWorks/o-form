@@ -1,9 +1,14 @@
+  O-Form is a clone of Blender, developed by Human Centric Works for OSAS,
+  the Open Source Architecture Suit. Source: github.com/HolagundiWorks/o-form
 
-  This version of Blender has been originally released at www.blender.org.
+  This program includes Blender, originally released at www.blender.org.
   It is subject to the GNU GPL license, which is part of this download.
 
     Blender, the free and open source 3D creation suite
     Copyright (C) 2023  Blender Foundation
+
+    O-Form
+    Copyright (C) 2026  Human Centric Works
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,7 +27,7 @@
   The Blender project uses code and libraries which are licensed under terms of
   licenses which are compatible with the GNU GPL 3 or later.
 
-  The license of each individual Blender source file can be found in the first
+  The license of each individual source file can be found in the first
   few lines after "SPDX-License-Identifier:". The license text of every such
   license can be found in license/.
 
@@ -37,3 +42,4 @@
   http://www.blender.org
   foundation@blender.org
 
+  Human Centric Works · Hospet
