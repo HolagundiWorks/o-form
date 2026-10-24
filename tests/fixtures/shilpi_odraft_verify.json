@@ -1,0 +1,10 @@
+﻿{
+    "odraft_shilpi_cli":  "C:\\Users\\holag\\AppData\\Local\\ShilpiDB\\bin\\shilpi.exe",
+    "online_wall_record_id":  "1584733835413355500",
+    "shilpi_stats":  "15 record(s), cell_size=730296.7433402215",
+    "online_wall_get":  "bbox=(0, 0)-(5, 0.20000000298023224) payload=\"{\\\"format\\\":\\\"oform-ifc-shilpi\\\",\\\"version\\\":1,\\\"kind\\\":\\\"element\\\",\\\"global_id\\\":\\\"e3bpLFWOIqAdCjAfCjhcF0\\\",\\\"ifc_class\\\":\\\"IfcWall\\\",\\\"ifc_label\\\":\\\"Wall\\\",\\\"name\\\":\\\"OnlineSampleWall\\\",\\\"storey\\\":\\\"Level 0\\\",\\\"object_name\\\":\\\"OnlineSampleWall\\\",\\\"bbox_m\\\":{\\\"size\\\":[5.0,0.20000000298023224,3.0],\\\"volume\\\":3.0000000447034836,\\\"area\\\":33.200000047683716,\\\"solid\\\":true},\\\"source\\\":{\\\"app\\\":\\\"O-Form\\\",\\\"drawing_id\\\":\\\"d6b23d00-c424-4105-b3ed-b4a079b26a47\\\",\\\"project_office_id\\\":\\\"osas-test-office-odraft-oform\\\"}}\"",
+    "note":  "O-Draft uses same DEFAULT_SHILPID 127.0.0.1:7420 (vdb.connect). shilpi CLI is the shared suite client.",
+    "oform_kind20_21_count":  7,
+    "shared_host":  "127.0.0.1:7420",
+    "shared_gateway":  "127.0.0.1:7421"
+}

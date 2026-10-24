@@ -1525,14 +1525,12 @@ UserDef *BKE_blendfile_userdef_from_defaults()
 
   /* Add-ons. */
   {
+    /* O-Form modeling defaults: no animation/BVH/pose/Cycles add-ons. */
     const char *addons[] = {
-        "io_anim_bvh",
         "io_curve_svg",
         "io_mesh_uv_layout",
         "io_scene_fbx",
         "io_scene_gltf2",
-        "cycles",
-        "pose_library",
         "bl_pkg",
     };
     for (int i = 0; i < ARRAY_SIZE(addons); i++) {

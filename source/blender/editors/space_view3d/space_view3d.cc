@@ -16,6 +16,7 @@
 #include "DNA_lightprobe_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_userdef_types.h"
 #include "DNA_view3d_types.h"
 
 #include "MEM_guardedalloc.h"
@@ -206,43 +207,48 @@ static SpaceLink *view3d_create(const ScrArea * /*area*/, const Scene *scene)
   region->regiontype = RGN_TYPE_HEADER;
   region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
 
-  /* tool header */
-  region = BKE_area_region_new();
+  /* O-Form is modeling-only: do not create tool header, asset shelf, tool shelf,
+   * or sidebar regions (removed, not merely hidden). */
+  const bool oform = STREQ(U.app_template, "oform");
+  if (!oform) {
+    /* tool header */
+    region = BKE_area_region_new();
 
-  BLI_addtail(&v3d->regionbase, region);
-  region->regiontype = RGN_TYPE_TOOL_HEADER;
-  region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
-  region->flag = RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER;
+    BLI_addtail(&v3d->regionbase, region);
+    region->regiontype = RGN_TYPE_TOOL_HEADER;
+    region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
+    region->flag = RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER;
 
-  /* asset shelf */
-  region = BKE_area_region_new();
+    /* asset shelf */
+    region = BKE_area_region_new();
 
-  BLI_addtail(&v3d->regionbase, region);
-  region->regiontype = RGN_TYPE_ASSET_SHELF;
-  region->alignment = RGN_ALIGN_BOTTOM;
-  region->flag |= RGN_FLAG_HIDDEN;
+    BLI_addtail(&v3d->regionbase, region);
+    region->regiontype = RGN_TYPE_ASSET_SHELF;
+    region->alignment = RGN_ALIGN_BOTTOM;
+    region->flag |= RGN_FLAG_HIDDEN;
 
-  /* asset shelf header */
-  region = BKE_area_region_new();
-  BLI_addtail(&v3d->regionbase, region);
-  region->regiontype = RGN_TYPE_ASSET_SHELF_HEADER;
-  region->alignment = RGN_ALIGN_BOTTOM | RGN_ALIGN_HIDE_WITH_PREV;
+    /* asset shelf header */
+    region = BKE_area_region_new();
+    BLI_addtail(&v3d->regionbase, region);
+    region->regiontype = RGN_TYPE_ASSET_SHELF_HEADER;
+    region->alignment = RGN_ALIGN_BOTTOM | RGN_ALIGN_HIDE_WITH_PREV;
 
-  /* tool shelf */
-  region = BKE_area_region_new();
+    /* tool shelf */
+    region = BKE_area_region_new();
 
-  BLI_addtail(&v3d->regionbase, region);
-  region->regiontype = RGN_TYPE_TOOLS;
-  region->alignment = RGN_ALIGN_LEFT;
-  region->flag = RGN_FLAG_HIDDEN;
+    BLI_addtail(&v3d->regionbase, region);
+    region->regiontype = RGN_TYPE_TOOLS;
+    region->alignment = RGN_ALIGN_LEFT;
+    region->flag = RGN_FLAG_HIDDEN;
 
-  /* buttons/list view */
-  region = BKE_area_region_new();
+    /* buttons/list view */
+    region = BKE_area_region_new();
 
-  BLI_addtail(&v3d->regionbase, region);
-  region->regiontype = RGN_TYPE_UI;
-  region->alignment = RGN_ALIGN_RIGHT;
-  region->flag = RGN_FLAG_HIDDEN;
+    BLI_addtail(&v3d->regionbase, region);
+    region->regiontype = RGN_TYPE_UI;
+    region->alignment = RGN_ALIGN_RIGHT;
+    region->flag = RGN_FLAG_HIDDEN;
+  }
 
   /* main region */
   region = BKE_area_region_new();

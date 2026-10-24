@@ -11,7 +11,14 @@ O-Form is a clone of Blender 5.2.3 LTS. This `docs/` tree describes the product.
 | Section | Contents |
 | --- | --- |
 | [User overview](user/overview.md) | Workspace, tools, files, status |
+| [UI redesign audit](developer/ui-redesign-audit.md) | Phase 1 inventory — conflicts, classify, sequence |
+| [UI design system](developer/ui-design-system.md) | Tokens, workspace layout, command taxonomy |
 | [Developer guide](developer/architecture.md) | Independence policy, remotes, architecture, checks |
+| [BIM ↔ ShilpiDB](developer/bim-shilpidb.md) | IFC sidecar on shared suite store |
+| [Suite take-off](developer/suite-takeoff.md) | Coherent take-off across O-Form · O-Draft · O-CoreOp |
+| [OSAS project folder](developer/osas-project-folder.md) | O-Studio create → draft + form + shilpi + live sync |
+| [OSAS project folder](developer/osas-project-folder.md) | O-Studio create → draft + form + shilpi, live sync |
+| [OSAS project folder](developer/osas-project-folder.md) | O-Studio create → draft + form + shilpi, live sync |
 | [Releases](developer/releases.md) | O-Form-owned versioning and release checklist |
 | [Windows build](build/windows.md) | Prerequisites, `make oform`, selftest |
 | [Licensing policy](licensing/policy.md) | Open-source / GPL policy and unresolved questions |

@@ -73,6 +73,14 @@ def boolean_objects(context, obj_a, obj_b, operation):
     if mode is None:
         return False, "Unknown Boolean operation"
 
+    # Ensure normals are current before the manifold check.
+    for obj in (obj_a, obj_b):
+        try:
+            obj.data.calc_normals_split()
+        except Exception:
+            pass
+        obj.data.update()
+
     if not object_is_solid(obj_a) or not object_is_solid(obj_b):
         return False, "Both operands must be closed solids (manifold)"
 
@@ -80,8 +88,9 @@ def boolean_objects(context, obj_a, obj_b, operation):
     original = obj_a.data
     backup = original.copy()
     backup.name = original.name + "_oform_backup"
-    was_edit = obj_a.mode == "EDIT"
-    applied = False
+    prev_active = context.view_layer.objects.active
+    prev_selected = [obj for obj in context.selected_objects]
+    prev_mode = context.mode
     try:
         if context.mode != "OBJECT":
             bpy.ops.object.mode_set(mode="OBJECT")
@@ -93,9 +102,17 @@ def boolean_objects(context, obj_a, obj_b, operation):
         mod = obj_a.modifiers.new(name="OFormBoolean", type="BOOLEAN")
         mod.operation = mode
         mod.object = obj_b
-        # Lite builds often lack GMP; keep the default float solver.
+        # Lite builds ship without GMP — EXACT can wipe the mesh. Stay on float.
+        if hasattr(mod, "solver"):
+            try:
+                mod.solver = "FLOAT"
+            except (TypeError, ValueError):
+                pass
+        before_faces = len(obj_a.data.polygons)
         bpy.ops.object.modifier_apply(modifier=mod.name)
-        applied = True
+        # Reject empty / collapsed results from a bad float solve.
+        if before_faces > 0 and len(obj_a.data.polygons) == 0:
+            raise RuntimeError("Boolean produced an empty mesh")
     except Exception as exc:
         try:
             if "OFormBoolean" in obj_a.modifiers:
@@ -107,29 +124,60 @@ def boolean_objects(context, obj_a, obj_b, operation):
         obj_a.data = backup
         if damaged is not original and damaged.users == 0:
             bpy.data.meshes.remove(damaged)
-        if was_edit:
-            try:
-                bpy.ops.object.mode_set(mode="EDIT")
-            except RuntimeError:
-                pass
+        _restore_object_context(context, prev_active, prev_selected, prev_mode)
         return False, "Boolean failed: " + str(exc)
 
     # Success: drop the unused backup copy.
     if backup.users == 0:
         bpy.data.meshes.remove(backup)
-    if was_edit:
-        try:
-            bpy.ops.object.mode_set(mode="EDIT")
-        except RuntimeError:
-            pass
+    # Clean micro-gaps left by the float solver.
+    try:
+        bm = bmesh.new()
+        bm.from_mesh(obj_a.data)
+        bmesh.ops.remove_doubles(bm, verts=list(bm.verts), dist=1e-5)
+        bm.to_mesh(obj_a.data)
+        bm.free()
+    except Exception:
+        pass
     obj_a.data.update()
+    _restore_object_context(context, prev_active, prev_selected, prev_mode)
+    if not object_is_solid(obj_a):
+        return True, operation.title() + " complete (result is not a closed solid)"
     return True, operation.title() + " complete"
+
+
+def _restore_object_context(context, active, selected, mode):
+    import bpy
+
+    try:
+        for obj in list(context.selected_objects):
+            obj.select_set(False)
+        for obj in selected:
+            if obj is not None:
+                try:
+                    obj.select_set(True)
+                except ReferenceError:
+                    pass
+        if active is not None:
+            try:
+                context.view_layer.objects.active = active
+            except ReferenceError:
+                pass
+        if mode == "EDIT_MESH":
+            bpy.ops.object.mode_set(mode="EDIT")
+        elif mode == "OBJECT" and context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception:
+        pass
 
 
 def boolean_edit_meshes(bm_target, bm_tool, operation):
     """
     Boolean two BMesh shells via temporary objects (lite build has no
     bmesh.ops.boolean). Mutates bm_target on success.
+
+    Preserves the caller's edit-mode object so Push/Pull can keep using the
+    same BMesh wrapper afterwards.
     """
     import bpy
 
@@ -141,11 +189,18 @@ def boolean_edit_meshes(bm_target, bm_tool, operation):
     if mode is None:
         return False, "Unknown Boolean operation"
 
+    edit_obj = bpy.context.edit_object
     mesh_a = bpy.data.meshes.new("OFormBoolA")
     mesh_b = bpy.data.meshes.new("OFormBoolB")
     obj_a = bpy.data.objects.new("OFormBoolA", mesh_a)
     obj_b = bpy.data.objects.new("OFormBoolB", mesh_b)
     try:
+        # Flush edit bmesh into its mesh datablock before we leave edit mode.
+        if edit_obj is not None and edit_obj.mode == "EDIT":
+            try:
+                bmesh.update_edit_mesh(edit_obj.data)
+            except Exception:
+                pass
         bm_target.to_mesh(mesh_a)
         bm_tool.to_mesh(mesh_b)
         mesh_a.update()
@@ -156,9 +211,39 @@ def boolean_edit_meshes(bm_target, bm_tool, operation):
         ok, message = boolean_objects(bpy.context, obj_a, obj_b, operation)
         if not ok:
             return False, message
-        bm_target.clear()
-        bm_target.from_mesh(obj_a.data)
-        bm_target.normal_update()
+        if len(obj_a.data.polygons) == 0:
+            return False, "Boolean produced an empty mesh"
+        # Write into the edit object first, then reload the wrapper from it.
+        if edit_obj is not None and edit_obj.type == "MESH":
+            try:
+                if getattr(edit_obj, "mode", "OBJECT") == "EDIT":
+                    bpy.ops.object.mode_set(mode="OBJECT")
+                # Replace geometry in place.
+                edit_mesh = edit_obj.data
+                edit_mesh.clear_geometry()
+                import bmesh as bmesh_mod
+
+                tmp = bmesh_mod.new()
+                tmp.from_mesh(obj_a.data)
+                tmp.to_mesh(edit_mesh)
+                tmp.free()
+                edit_mesh.update()
+                bpy.context.view_layer.objects.active = edit_obj
+                for obj in list(bpy.context.selected_objects):
+                    obj.select_set(obj == edit_obj)
+                edit_obj.select_set(True)
+                bpy.ops.object.mode_set(mode="EDIT")
+                bm_target.clear()
+                bm_target.from_edit_mesh(edit_mesh)
+                bm_target.normal_update()
+            except Exception as exc:
+                return False, "Boolean edit sync failed: " + str(exc)
+        else:
+            bm_target.clear()
+            bm_target.from_mesh(obj_a.data)
+            bm_target.normal_update()
+        if not bm_target.faces:
+            return False, "Boolean produced an empty mesh"
         return True, message
     finally:
         for obj in (obj_a, obj_b):

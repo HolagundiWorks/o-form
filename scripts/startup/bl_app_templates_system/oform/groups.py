@@ -49,7 +49,9 @@ def ensure_root(context):
         mesh = bpy.data.meshes.new("Model")
         obj = bpy.data.objects.new("Model", mesh)
         scene.collection.objects.link(obj)
-    _tag(obj, KIND_ROOT)
+    # Only write when missing/wrong — ID writes are illegal during panel draw.
+    if obj.get(PROP_KIND) != KIND_ROOT:
+        _tag(obj, KIND_ROOT)
     # Use ID-property access (scene.get), not getattr — these are custom props.
     if not scene.get(CONTEXT_PROP):
         scene[CONTEXT_PROP] = obj.name
@@ -58,12 +60,23 @@ def ensure_root(context):
     return obj
 
 
-def context_object(context):
+def get_root(context):
+    """Read-only Model lookup for UI draw (no ID writes)."""
+    obj = context.scene.objects.get("Model")
+    if obj is not None and obj.type == "MESH":
+        return obj
+    return None
+
+
+def context_object(context, *, create=True):
     scene = context.scene
-    ensure_root(context)
+    if create:
+        ensure_root(context)
     name = scene.get(CONTEXT_PROP, "Model") or "Model"
     obj = scene.objects.get(name)
     if obj is None or obj.type != "MESH":
+        if not create:
+            return get_root(context)
         obj = ensure_root(context)
         scene[CONTEXT_PROP] = obj.name
     return obj

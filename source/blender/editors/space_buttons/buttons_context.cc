@@ -1271,10 +1271,6 @@ int /*eContextResult*/ buttons_context(const bContext *C,
 
 static bool buttons_panel_context_poll(const bContext *C, PanelType * /*pt*/)
 {
-  /* O-Form draws its own pane header. The Scene path and pin are the properties editor's. */
-  if (STREQ(U.app_template, "oform")) {
-    return false;
-  }
   SpaceProperties *sbuts = CTX_wm_space_properties(C);
   return sbuts->mainb != BCONTEXT_TOOL;
 }
@@ -1357,6 +1353,10 @@ static void buttons_panel_context_draw(const bContext *C, Panel *panel)
 
 void buttons_context_register(ARegionType *art)
 {
+  /* O-Form draws its own pane header — do not register the Scene path/pin panel. */
+  if (STREQ(U.app_template, "oform")) {
+    return;
+  }
   PanelType *pt = MEM_new_zeroed<PanelType>("spacetype buttons panel context");
   STRNCPY_UTF8(pt->idname, "PROPERTIES_PT_context");
   STRNCPY_UTF8(pt->label, N_("Context")); /* XXX C panels unavailable through RNA bpy.types! */

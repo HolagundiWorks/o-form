@@ -18,7 +18,7 @@ It is a **clone of [Blender](https://www.blender.org) 5.2.3 LTS**: the full sour
 | Files | `.blend` (export: Wavefront OBJ, glTF) |
 | License | GNU GPL v2 or later ([LICENSE](LICENSE), [COPYING](COPYING)) |
 
-O-Form is **not** affiliated with the Blender Foundation or with Trimble. It does not use SketchUp files, icons, or artwork. It does **not** claim BIM/IFC certification, SketchUp file compatibility, or production readiness beyond what is listed below.
+O-Form is **not** affiliated with the Blender Foundation or with Trimble. It does not use SketchUp files, icons, or artwork. It includes a **native BIM engine** (classify, storeys, IFC4 import/export) that is **not** BlenderBIM/Bonsai and is **not** IFC-certified. It does **not** claim SketchUp file compatibility.
 
 ## Documentation
 
@@ -38,15 +38,19 @@ O-Form is **not** affiliated with the Blender Foundation or with Trimble. It doe
 
 - Windows lite build target `make oform 2022b` → `oform.exe`
 - App template with suite branding (pastel green accent)
-- Tools: Select, Eraser, Paint, Line, Arc, Rectangle, Circle, Push/Pull, Offset, Move, Rotate, Scale, Orbit, Pan, Zoom, Zoom Extents
+- SketchUp-aligned tools: Select, Eraser, Paint, Line, Freehand, Arc, Rectangle, Circle, Polygon, Push/Pull, Follow Me, Offset, Move, Rotate, Scale, Tape Measure, Protractor, Back Edges, Orbit, Pan, Zoom, Zoom Extents
+- Groups and Components (G / Ctrl+G, double-click to edit, Esc to close, Explode)
+- O-Draft-aligned shell: left tools + Properties/Ask side panels, light/dark toggle, Ask AI with Allow/Decline
+- SketchUp-like canvas: solid paper, RGB axes, no ground grid
+- SketchUp-style keys (Space, L, A, R, C, P, F, M, Q, S, T, E, B, G, O, H, Z, Shift+Z, plus N/J/X/K/Shift+L/Ctrl+G)
 - Axis locks, typed measurements, basic inference (endpoint, midpoint, on edge, on face, axis)
-- Face split when drawing a closed shape on a face
+- Face split when drawing a closed shape on a face; Ctrl copy on Move/Push-Pull
 - Headless selftest (`OFORM_SELFTEST_OK`)
 - OBJ export (CMake); glTF via `io_scene_gltf2`
 
 **Not implemented / out of scope for now**
 
-- Follow Me, Tape Measure, Groups, Components
+- Nested groups inside groups; full component browser
 - Full parallel / perpendicular / intersection inference
 - Verified macOS/Linux product packages
 - Replacement of all Blender chrome icons inside the executable

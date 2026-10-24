@@ -377,40 +377,226 @@ def _tri_area_sum(points, tris):
 
 
 def _new_face(bm, verts, normal):
-    if len(set(verts)) < 3:
+    cleaned = []
+    for vert in verts:
+        if vert is None or not vert.is_valid:
+            return None
+        if not cleaned or cleaned[-1] != vert:
+            cleaned.append(vert)
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1]:
+        cleaned.pop()
+    if len(set(cleaned)) < 3:
         return None
     try:
-        face = bm.faces.new(verts)
+        face = bm.faces.new(cleaned)
     except ValueError:
-        face = bm.faces.get(tuple(verts))
+        face = bm.faces.get(tuple(cleaned))
+        if face is None:
+            try:
+                face = bm.faces.get(tuple(reversed(cleaned)))
+            except Exception:
+                face = None
+    except ReferenceError:
+        return None
     if face is None or not face.is_valid:
         return None
-    face.normal_update()
-    if face.normal.dot(normal) < 0.0:
-        face.normal_flip()
+    try:
+        face.normal_update()
+        if Vector(normal).length > 1e-12 and face.normal.dot(normal) < 0.0:
+            face.normal_flip()
+    except ReferenceError:
+        return None
     return face
 
 
+def _project_to_plane(co, origin, normal):
+    n = Vector(normal)
+    if n.length_squared < 1e-16:
+        return Vector(co)
+    n.normalize()
+    p = Vector(co)
+    o = Vector(origin)
+    return p - n * (p - o).dot(n)
+
+
+def _soften_bridge_edges(bm, rim_faces, outer_verts, inner_verts):
+    """Hide rim construction edges (SketchUp soft) — keep outer + inner loops hard."""
+    keep = set()
+    for loop in (outer_verts, inner_verts):
+        count = len(loop)
+        for i in range(count):
+            edge = bm.edges.get((loop[i], loop[(i + 1) % count]))
+            if edge is not None:
+                keep.add(edge)
+    for face in rim_faces:
+        if face is None or not face.is_valid:
+            continue
+        for edge in face.edges:
+            if edge in keep:
+                continue
+            edge.smooth = True
+            edge.hide = True
+
+
+def _annular_rim_faces(bm, outer_verts, outer_2d, inner_verts, inner_2d, normal):
+    """Fill the frame between outer and inner loops with side strips (no corner fan)."""
+    if len(outer_verts) < 3 or len(inner_verts) < 3:
+        return []
+    cx = sum(p[0] for p in inner_2d) / len(inner_2d)
+    cy = sum(p[1] for p in inner_2d) / len(inner_2d)
+
+    def ang(p):
+        return math.atan2(p[1] - cy, p[0] - cx)
+
+    inner_order = sorted(range(len(inner_verts)), key=lambda i: ang(inner_2d[i]))
+    made = []
+    n = len(outer_verts)
+    for i in range(n):
+        i1 = (i + 1) % n
+        a0 = ang(outer_2d[i])
+        a1 = ang(outer_2d[i1])
+        span = (a1 - a0) % (2.0 * math.pi)
+        if span < 1e-12:
+            span = 2.0 * math.pi
+        picked = []
+        for j in inner_order:
+            d = (ang(inner_2d[j]) - a0) % (2.0 * math.pi)
+            if 1e-9 < d <= span + 1e-9:
+                picked.append(j)
+        if not picked:
+            # Empty wedge: pin the nearest inner corner to this outer edge.
+            mid = (
+                0.5 * (outer_2d[i][0] + outer_2d[i1][0]),
+                0.5 * (outer_2d[i][1] + outer_2d[i1][1]),
+            )
+            best_j = min(
+                range(len(inner_verts)),
+                key=lambda j: (inner_2d[j][0] - mid[0]) ** 2 + (inner_2d[j][1] - mid[1]) ** 2,
+            )
+            picked = [best_j]
+        verts = [outer_verts[i], outer_verts[i1]]
+        for j in reversed(picked):
+            verts.append(inner_verts[j])
+        # Drop consecutive duplicates.
+        cleaned = []
+        for vert in verts:
+            if not cleaned or cleaned[-1] != vert:
+                cleaned.append(vert)
+        if len(cleaned) >= 2 and cleaned[0] == cleaned[-1]:
+            cleaned.pop()
+        if len(cleaned) < 3:
+            continue
+        item = _new_face(bm, cleaned, normal)
+        if item is not None:
+            made.append(item)
+    return made
+
+
+def _valid_verts(verts):
+    return [vert for vert in verts if vert is not None and vert.is_valid]
+
+
 def _split_face_with_hole(bm, face, points):
-    """Replace face with an inner cap plus the frame around it. points are CCW in 3D."""
+    """Replace face with an inner cap plus a clean rim (SketchUp face-on-face)."""
     normal = face.normal.copy()
+    if normal.length < 1e-12:
+        return None, []
+    normal.normalize()
     origin, u, v, outer_2d = _face_frame(face)
+    plane_origin = face.verts[0].co.copy()
+    # Snap every point onto the host face plane so coplanar splits stay clean.
+    pts = [_project_to_plane(Vector(p), plane_origin, normal) for p in points]
     outer_verts = [loop.vert for loop in face.loops]
     if _signed_area(outer_2d) < 0.0:
         outer_verts.reverse()
         outer_2d.reverse()
-    inner_verts = [_new_vert(bm, co) for co in points]
-    inner_2d = [_project(origin, u, v, vert.co) for vert in inner_verts]
-    if _signed_area(inner_2d) < 0.0:
-        inner_verts.reverse()
-        inner_2d.reverse()
+    # Snapshot coordinates — vert refs can die across delete/rebuild.
+    outer_cos = [vert.co.copy() for vert in outer_verts]
+    inner_cos = [Vector(co) for co in pts]
+    if _signed_area([_project(origin, u, v, co) for co in inner_cos]) < 0.0:
+        inner_cos.reverse()
 
+    inner_verts = [_new_vert(bm, co) for co in inner_cos]
+    inner_2d = [_project(origin, u, v, vert.co) for vert in inner_verts]
     target = abs(_signed_area(outer_2d)) - abs(_signed_area(inner_2d))
+
+    bm.faces.remove(face)
+    made = _annular_rim_faces(bm, outer_verts, outer_2d, inner_verts, inner_2d, normal)
+    _ensure(bm)
+    rim_area = sum(item.calc_area() for item in made if item.is_valid)
+    ok_rim = bool(made) and abs(rim_area - target) <= max(1e-3, abs(target) * 0.08)
+    if ok_rim:
+        inner_face = _new_face(bm, inner_verts, normal)
+        if inner_face is not None:
+            _soften_bridge_edges(bm, made, outer_verts, inner_verts)
+            _ensure(bm)
+            _select_only_face(bm, inner_face)
+            return inner_face, made
+
+    # Rim failed — clear strips and rebuild from coordinate snapshots (no stale refs).
+    for item in list(made):
+        if item is not None and item.is_valid:
+            bm.faces.remove(item)
+    outer_fresh = [_new_vert(bm, co) for co in outer_cos]
+    inner_fresh = [_new_vert(bm, co) for co in inner_cos]
+    outer_set = set(outer_fresh)
+    inner_set = set(inner_fresh)
+    spokes = []
+    for edge in list(bm.edges):
+        if not edge.is_valid:
+            continue
+        ends = set(edge.verts)
+        if ends & outer_set and ends & inner_set:
+            spokes.append(edge)
+    if spokes:
+        bmesh.ops.delete(bm, geom=spokes, context="EDGES")
+    # Drop loose edges that only bound the failed inner loop (0 faces).
+    loose = [
+        edge
+        for edge in list(bm.edges)
+        if edge.is_valid
+        and len(edge.link_faces) == 0
+        and set(edge.verts) <= inner_set
+    ]
+    if loose:
+        bmesh.ops.delete(bm, geom=loose, context="EDGES")
+    _ensure(bm)
+    outer_fresh = _valid_verts([_new_vert(bm, co) for co in outer_cos])
+    inner_fresh = _valid_verts([_new_vert(bm, co) for co in inner_cos])
+    if len(outer_fresh) < 3 or len(inner_fresh) < 3:
+        return None, []
+    outer_2d = [_project(origin, u, v, vert.co) for vert in outer_fresh]
+    inner_2d = [_project(origin, u, v, vert.co) for vert in inner_fresh]
+    host = _new_face(bm, outer_fresh, normal)
+    if host is None:
+        return None, []
+    return _split_face_with_hole_bridge(
+        bm, host, outer_fresh, outer_2d, inner_fresh, inner_2d, normal, origin, u, v, target
+    )
+
+
+def _split_face_with_hole_bridge(
+    bm, face, outer_verts, outer_2d, inner_verts, inner_2d, normal, origin, u, v, target
+):
+    """Legacy single-bridge triangulation; softens diagonals so they do not read as hard edges."""
+    outer_verts = _valid_verts(outer_verts)
+    inner_verts = _valid_verts(inner_verts)
+    if len(outer_verts) < 3 or len(inner_verts) < 3:
+        return None, []
+    if len(outer_2d) != len(outer_verts):
+        outer_2d = [_project(origin, u, v, vert.co) for vert in outer_verts]
+    if len(inner_2d) != len(inner_verts):
+        inner_2d = [_project(origin, u, v, vert.co) for vert in inner_verts]
+
     hole_verts = list(reversed(inner_verts))
     hole_2d = list(reversed(inner_2d))
     pairs = []
     for i, ov in enumerate(outer_verts):
+        if not ov.is_valid:
+            continue
         for j, hv in enumerate(hole_verts):
+            if not hv.is_valid:
+                continue
             pairs.append(((ov.co - hv.co).length_squared, i, j))
     pairs.sort(key=lambda item: item[0])
 
@@ -418,6 +604,8 @@ def _split_face_with_hole(bm, face, points):
     for _dist, i0, j0 in pairs:
         ring_v = outer_verts[i0:] + outer_verts[: i0 + 1] + hole_verts[j0:] + hole_verts[: j0 + 1]
         ring_p = outer_2d[i0:] + outer_2d[: i0 + 1] + hole_2d[j0:] + hole_2d[: j0 + 1]
+        if any(not vert.is_valid for vert in ring_v):
+            continue
         if _signed_area(ring_p) < 0.0:
             ring_v.reverse()
             ring_p.reverse()
@@ -430,16 +618,25 @@ def _split_face_with_hole(bm, face, points):
             break
 
     if chosen is None:
-        return _split_face_with_fill(bm, face, inner_verts, inner_2d, normal, origin, u, v)
+        if face is not None and face.is_valid:
+            return _split_face_with_fill(bm, face, inner_verts, inner_2d, normal, origin, u, v)
+        return None, []
 
     ring_v, tris = chosen
-    bm.faces.remove(face)
+    if face is not None and face.is_valid:
+        bm.faces.remove(face)
     made = []
     for ia, ib, ic in tris:
-        tri = _new_face(bm, (ring_v[ia], ring_v[ib], ring_v[ic]), normal)
+        verts = (ring_v[ia], ring_v[ib], ring_v[ic])
+        if any(not vert.is_valid for vert in verts):
+            continue
+        tri = _new_face(bm, verts, normal)
         if tri is not None:
             made.append(tri)
     inner_face = _new_face(bm, inner_verts, normal)
+    if inner_face is None:
+        return None, made
+    _soften_bridge_edges(bm, made, outer_verts, inner_verts)
     _ensure(bm)
     _select_only_face(bm, inner_face)
     return inner_face, made
@@ -484,6 +681,12 @@ def _split_face_with_fill(bm, face, inner_verts, inner_2d, normal, origin, u, v)
             ele.normal_flip()
         made.append(ele)
     inner_face = _new_face(bm, inner_verts, normal)
+    outer_verts = []
+    for edge in outer_edges:
+        if edge.is_valid:
+            outer_verts.extend(list(edge.verts))
+    # Prefer loop order from inner for soften keep-set.
+    _soften_bridge_edges(bm, made, list(dict.fromkeys(outer_verts)), inner_verts)
     _ensure(bm)
     _select_only_face(bm, inner_face)
     return inner_face, made
@@ -506,6 +709,60 @@ def _on_boundary(pts, p, tol=1e-5):
     return False
 
 
+def _merge_coplanar_hosts(bm, pts, tol=TOL):
+    """Dissolve coplanar faces the sketch overlaps so a single host can be split."""
+    if len(pts) < 3:
+        return None
+    centroid = sum(pts, Vector((0.0, 0.0, 0.0))) / float(len(pts))
+    seed = find_host_face(bm, [centroid], tol)
+    if seed is None:
+        # Fall back: any face containing at least one sketch point.
+        for point in pts:
+            seed = find_host_face(bm, [point], tol)
+            if seed is not None:
+                break
+    if seed is None:
+        return None
+    normal = seed.normal.copy()
+    if normal.length < 1e-12:
+        return None
+    normal.normalize()
+    origin = seed.verts[0].co.copy()
+    u, v = _basis(normal)
+    sketch_2d = [_project(origin, u, v, p) for p in pts]
+    if _signed_area(sketch_2d) < 0.0:
+        sketch_2d = list(reversed(sketch_2d))
+
+    region = []
+    for face in list(bm.faces):
+        if not face.is_valid:
+            continue
+        fn = face.normal.copy()
+        if fn.length < 1e-12:
+            continue
+        fn.normalize()
+        if abs(fn.dot(normal)) < 0.999:
+            continue
+        if abs((face.verts[0].co - origin).dot(normal)) > tol * 10.0:
+            continue
+        if any(_contains_points(face, [p], tol) for p in pts):
+            region.append(face)
+            continue
+        center = face.calc_center_median()
+        if _point_in_poly(sketch_2d, _project(origin, u, v, center), tol):
+            region.append(face)
+    if seed not in region:
+        region.append(seed)
+    if len(region) == 1:
+        return region[0]
+    try:
+        bmesh.ops.dissolve_faces(bm, faces=region, use_verts=False)
+    except (ValueError, RuntimeError):
+        return seed
+    _ensure(bm)
+    return find_host_face(bm, pts, tol) or find_host_face(bm, [centroid], tol)
+
+
 def add_polygon(bm, points, tol=TOL):
     """Add a face, splitting a host face when the polygon lies inside it."""
     pts = [Vector(p) for p in points]
@@ -515,9 +772,23 @@ def add_polygon(bm, points, tol=TOL):
     if (pts[1] - pts[0]).cross(pts[2] - pts[0]).length < 1e-10:
         return None
     host = find_host_face(bm, pts, tol)
-    if host is not None and _strictly_inside(host, pts):
-        face, _made = _split_face_with_hole(bm, host, pts)
-        return face
+    if host is None or not _strictly_inside(host, pts):
+        # After a cut the surface is many coplanar faces — merge, then split.
+        host = _merge_coplanar_hosts(bm, pts, tol)
+    if host is not None and host.is_valid:
+        # Auto-snap the sketch onto the host face plane before splitting / creating.
+        origin = host.verts[0].co
+        normal = host.normal.copy()
+        pts = [_project_to_plane(co, origin, normal) for co in pts]
+    if host is not None and host.is_valid and (
+        _strictly_inside(host, pts) or _contains_points(host, pts, tol)
+    ):
+        try:
+            face, _made = _split_face_with_hole(bm, host, pts)
+        except (ReferenceError, ValueError, RuntimeError):
+            face = None
+        if face is not None:
+            return face
     verts = [_new_vert(bm, co, tol) for co in pts]
     # Unique consecutive verts.
     cleaned = []
@@ -640,10 +911,463 @@ def selected_face(bm, face_index=-1):
     return None
 
 
-def push_pull(bm, face, distance, copy=False):
-    if face is None or not face.is_valid or abs(distance) < 1e-9:
+def _face_is_open(face):
+    """True when every edge is a boundary (lone face / open shell rim)."""
+    for edge in face.edges:
+        if len(edge.link_faces) != 1:
+            return False
+    return True
+
+
+def _side_normal(a, b, delta):
+    edge = b.co - a.co
+    n = edge.cross(delta)
+    if n.length_squared < 1e-16:
+        return delta.normalized()
+    return n.normalized()
+
+
+def _extrude_face_prism(bm, face, delta, keep_bottom=True):
+    """Build a closed prism from a face. Keeps ``face`` as the bottom cap when asked."""
+    if face is None or not face.is_valid or delta.length < 1e-9:
         return None
     normal = face.normal.copy()
+    if normal.length < 1e-12:
+        normal = delta.normalized()
+    else:
+        normal.normalize()
+    bottom = [loop.vert for loop in face.loops]
+    count = len(bottom)
+    if count < 3:
+        return None
+    top = [bm.verts.new(vert.co + delta) for vert in bottom]
+    for i in range(count):
+        a = bottom[i]
+        b = bottom[(i + 1) % count]
+        c = top[(i + 1) % count]
+        d = top[i]
+        _new_face(bm, (a, b, c, d), _side_normal(a, b, delta))
+    top_face = _new_face(bm, top, delta)
+    if keep_bottom and face.is_valid:
+        # Outward bottom faces opposite the extrusion direction.
+        face.normal_update()
+        if face.normal.dot(delta) > 0.0:
+            face.normal_flip()
+    elif face.is_valid:
+        bm.faces.remove(face)
+    _ensure(bm)
+    if top_face is not None and top_face.is_valid:
+        _select_only_face(bm, top_face)
+    return top_face
+
+
+def _ray_hit_face(bm, origin, direction, max_dist, skip):
+    """Return (face, distance, point) for the nearest face hit, or None."""
+    if direction.length < 1e-12:
+        return None
+    direction = direction.normalized()
+    best = None
+    best_dist = max_dist
+    for face in bm.faces:
+        if face in skip or not face.is_valid:
+            continue
+        denom = face.normal.dot(direction)
+        if abs(denom) < 1e-10:
+            continue
+        plane_co = face.verts[0].co
+        t = (plane_co - origin).dot(face.normal) / denom
+        if t < 1e-5 or t > best_dist:
+            continue
+        hit = origin + direction * t
+        if not _contains_points(face, [hit], tol=1e-4):
+            continue
+        best = (face, t, hit)
+        best_dist = t
+    return best
+
+
+def _find_face_on_plane(bm, point, plane_normal, plane_origin, skip=None):
+    """Pick the face under ``point`` that lies on the given plane."""
+    skip = skip or set()
+    n = Vector(plane_normal).normalized()
+    o = Vector(plane_origin)
+    best = None
+    best_area = None
+    for face in bm.faces:
+        if face in skip or not face.is_valid:
+            continue
+        fn = face.normal.copy()
+        if fn.length < 1e-12:
+            continue
+        fn.normalize()
+        if abs(fn.dot(n)) < 0.995:
+            continue
+        if abs((face.verts[0].co - o).dot(n)) > 1e-3:
+            continue
+        if not _contains_points(face, [point], tol=1e-3):
+            continue
+        area = face.calc_area()
+        if best is None or area < best_area:
+            best = face
+            best_area = area
+    return best
+
+
+def _face_on_plane(face, origin, normal, ang_tol=0.995, dist_tol=1e-3):
+    if face is None or not face.is_valid:
+        return False
+    fn = face.normal.copy()
+    if fn.length < 1e-12:
+        return False
+    fn.normalize()
+    if abs(fn.dot(normal)) < ang_tol:
+        return False
+    return abs((face.verts[0].co - origin).dot(normal)) <= dist_tol
+
+
+def _trace_edge_loops(edges):
+    """Ordered closed vert loops from a set of boundary edges."""
+    unused = {edge for edge in edges if edge is not None and edge.is_valid}
+    adj = {}
+    for edge in unused:
+        a, b = edge.verts
+        adj.setdefault(a, []).append(edge)
+        adj.setdefault(b, []).append(edge)
+    loops = []
+    while unused:
+        seed = unused.pop()
+        v0, v1 = seed.verts[0], seed.verts[1]
+        ordered = [v0]
+        prev, curr = v0, v1
+        guard = 0
+        while guard < 10000:
+            guard += 1
+            ordered.append(curr)
+            if curr == v0 and len(ordered) > 2:
+                ordered.pop()
+                break
+            picked = None
+            for edge in adj.get(curr, []):
+                if edge not in unused:
+                    continue
+                other = edge.other_vert(curr)
+                if other == prev:
+                    continue
+                picked = (edge, other)
+                break
+            if picked is None:
+                for edge in adj.get(curr, []):
+                    if edge in unused:
+                        picked = (edge, edge.other_vert(curr))
+                        break
+            if picked is None:
+                break
+            edge, other = picked
+            unused.discard(edge)
+            prev, curr = curr, other
+            if curr == v0:
+                break
+        if len(ordered) >= 3:
+            loops.append(ordered)
+    return loops
+
+
+def _cut_hole_on_plane(bm, hole_verts, plane_normal, plane_origin, skip_faces=None):
+    """Open a through-hole on a plane using the tunnel-end verts as the rim.
+
+    ``hole_verts`` must already lie on the far plane and be shared with the
+    tunnel side faces — that keeps the opening manifold (no stray spikes).
+    """
+    skip_faces = set(skip_faces or [])
+    hole_verts = [vert for vert in hole_verts if vert is not None and vert.is_valid]
+    count = len(hole_verts)
+    if count < 3:
+        return False
+    n = Vector(plane_normal).normalized()
+    o = Vector(plane_origin)
+    # Snap tunnel ends onto the plane and ensure the rim edges exist.
+    for vert in hole_verts:
+        vert.co = _project_to_plane(vert.co, o, n)
+    for i in range(count):
+        a = hole_verts[i]
+        b = hole_verts[(i + 1) % count]
+        if a != b and bm.edges.get((a, b)) is None:
+            try:
+                bm.edges.new((a, b))
+            except ValueError:
+                pass
+
+    u, v = _basis(n)
+    hole_2d = [_project(o, u, v, vert.co) for vert in hole_verts]
+    if _signed_area(hole_2d) < 0.0:
+        hole_verts = list(reversed(hole_verts))
+        hole_2d = list(reversed(hole_2d))
+    hole_poly = list(hole_2d)
+    cx = sum(p[0] for p in hole_2d) / float(count)
+    cy = sum(p[1] for p in hole_2d) / float(count)
+    hole_pts = [vert.co.copy() for vert in hole_verts]
+
+    def _host_contains_hole(face):
+        if not _contains_points(face, hole_pts, tol=1e-3):
+            return False
+        frame = [_project(o, u, v, loop.vert.co) for loop in face.loops]
+        if _signed_area(frame) < 0.0:
+            frame = list(reversed(frame))
+        return _point_in_poly(frame, (cx, cy), tol=1e-4)
+
+    # Prefer a single host face that fully contains the opening.
+    host = None
+    for face in list(bm.faces):
+        if face in skip_faces or not face.is_valid:
+            continue
+        if not _face_on_plane(face, o, n):
+            continue
+        if _host_contains_hole(face):
+            host = face
+            break
+
+    def _fill_frame_and_open(fill_edges, hole_polys, normal):
+        """Triangle-fill an outer+holes edge net, then delete hole interiors."""
+        try:
+            filled = bmesh.ops.triangle_fill(
+                bm,
+                edges=list(fill_edges),
+                normal=normal,
+                use_beauty=True,
+                use_dissolve=False,
+            )
+        except (ValueError, RuntimeError):
+            filled = {}
+        doomed = []
+        made = 0
+        for ele in filled.get("geom", []):
+            if not isinstance(ele, bmesh.types.BMFace) or not ele.is_valid:
+                continue
+            center = _project(o, u, v, ele.calc_center_median())
+            if any(
+                _point_in_poly(poly, center) and not _on_boundary(poly, center)
+                for poly in hole_polys
+            ):
+                doomed.append(ele)
+                continue
+            if ele.normal.dot(normal) < 0.0:
+                ele.normal_flip()
+            made += 1
+        if doomed:
+            bmesh.ops.delete(bm, geom=doomed, context="FACES")
+        loose = [
+            edge
+            for edge in list(bm.edges)
+            if edge.is_valid and len(edge.link_faces) == 0
+        ]
+        if loose:
+            bmesh.ops.delete(bm, geom=loose, context="EDGES")
+        _ensure(bm)
+        return made > 0
+
+    def _loop_edges(verts):
+        edges = []
+        for i in range(len(verts)):
+            a = verts[i]
+            b = verts[(i + 1) % len(verts)]
+            if not a.is_valid or not b.is_valid or a == b:
+                continue
+            edge = bm.edges.get((a, b))
+            if edge is None:
+                try:
+                    edge = bm.edges.new((a, b))
+                except ValueError:
+                    edge = None
+            if edge is not None:
+                edges.append(edge)
+        return edges
+
+    if host is not None:
+        normal = host.normal.copy()
+        if normal.length < 1e-12:
+            normal = n.copy()
+        else:
+            normal.normalize()
+        if normal.dot(n) < 0.0:
+            normal = -normal
+        outer_edges = [loop.edge for loop in host.loops]
+        bm.faces.remove(host)
+        _ensure(bm)
+        return _fill_frame_and_open(
+            list(outer_edges) + _loop_edges(hole_verts),
+            [hole_poly],
+            normal,
+        )
+
+    # Far side already has openings: rebuild the whole planar patch with holes.
+    plane_faces = [
+        face
+        for face in list(bm.faces)
+        if face not in skip_faces and face.is_valid and _face_on_plane(face, o, n)
+    ]
+    if not plane_faces:
+        return False
+    plane_set = set(plane_faces)
+    border = []
+    for face in plane_faces:
+        for edge in face.edges:
+            linked = sum(1 for item in edge.link_faces if item in plane_set)
+            if linked == 1:
+                border.append(edge)
+    loops = _trace_edge_loops(border)
+    if not loops:
+        return False
+    scored = []
+    for loop in loops:
+        pts2 = [_project(o, u, v, vert.co) for vert in loop]
+        scored.append((abs(_signed_area(pts2)), loop, pts2))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    outer_verts = scored[0][1]
+    existing_holes = []
+    for _area, loop, pts2 in scored[1:]:
+        if set(loop) == set(hole_verts):
+            continue
+        poly = pts2 if _signed_area(pts2) >= 0.0 else list(reversed(pts2))
+        existing_holes.append((loop, poly))
+
+    bmesh.ops.delete(bm, geom=plane_faces, context="FACES")
+    _ensure(bm)
+
+    all_hole_loops = [item[0] for item in existing_holes] + [hole_verts]
+    all_hole_polys = [item[1] for item in existing_holes] + [hole_poly]
+    fill_edges = _loop_edges(outer_verts)
+    for loop in all_hole_loops:
+        fill_edges.extend(_loop_edges(loop))
+    return _fill_frame_and_open(fill_edges, all_hole_polys, n)
+
+
+def _make_cutter_prism(loop_cos, direction, depth, extend=1e-3):
+    """Closed cutter prism along ``direction`` for through-cut boolean."""
+    if len(loop_cos) < 3 or direction.length < 1e-12 or depth < 1e-9:
+        return None
+    direction = Vector(direction).normalized()
+    cutter = bmesh.new()
+    start = -direction * extend
+    end = direction * (depth + extend)
+    bottom = [cutter.verts.new(Vector(co) + start) for co in loop_cos]
+    top = [cutter.verts.new(Vector(co) + end) for co in loop_cos]
+    move = end - start
+    count = len(bottom)
+    for i in range(count):
+        a = bottom[i]
+        b = bottom[(i + 1) % count]
+        c = top[(i + 1) % count]
+        d = top[i]
+        _new_face(cutter, (a, b, c, d), _side_normal(a, b, move))
+    _new_face(cutter, list(reversed(bottom)), -move)
+    _new_face(cutter, top, move)
+    cutter.normal_update()
+    return cutter
+
+
+def _punch_through_boolean(bm, face, delta, thick):
+    """Through-opening via solid boolean — reliable with multiple windows."""
+    try:
+        import solids
+    except ImportError:
+        return False
+    loop = [loop.vert.co.copy() for loop in face.loops]
+    direction = delta.normalized()
+    cutter = _make_cutter_prism(loop, direction, max(thick, delta.length))
+    if cutter is None:
+        return False
+    try:
+        if not solids.is_solid(bm) or not solids.is_solid(cutter):
+            return False
+        ok, _message = solids.boolean_edit_meshes(bm, cutter, "DIFFERENCE")
+        return bool(ok)
+    except Exception:
+        return False
+    finally:
+        cutter.free()
+
+
+def _push_into_shell(bm, face, delta):
+    """Chop a face on a shell: open the surface and push a pocket (or through-hole)."""
+    if face is None or not face.is_valid or delta.length < 1e-9:
+        return None
+    try:
+        center = face.calc_center_median()
+        direction = delta.normalized()
+        thickness_hit = _ray_hit_face(
+            bm,
+            center + direction * 1e-4,
+            direction,
+            max_dist=max(delta.length, 1e-3) + 10.0,
+            skip={face},
+        )
+        bottom_cos = [loop.vert.co.copy() for loop in face.loops]
+        count = len(bottom_cos)
+        if count < 3:
+            return None
+
+        punch = False
+        move = delta
+        thick = None
+        opp_normal = None
+        opp_origin = None
+        if thickness_hit is not None:
+            opp, thick, _pt = thickness_hit
+            # Through-cut when the push reaches (or passes) the far face.
+            if thick > 1e-6 and delta.length + 1e-4 >= thick:
+                move = direction * thick
+                punch = True
+                opp_normal = opp.normal.copy()
+                opp_origin = opp.verts[0].co.copy()
+
+        # Note: modifier boolean on the lite (float) solver is unsafe for punch
+        # (can wipe the mesh). Use geometric tunnel + triangulated far-face cut.
+
+        bm.faces.remove(face)
+        bottom = [_new_vert(bm, co) for co in bottom_cos]
+        top = [bm.verts.new(co + move) for co in bottom_cos]
+        # Snap tunnel end exactly onto the far plane for a clean through-weld.
+        if punch and opp_normal is not None:
+            nn = opp_normal.normalized()
+            for vert in top:
+                vert.co = vert.co - nn * (vert.co - opp_origin).dot(nn)
+
+        side_faces = []
+        for i in range(count):
+            a = bottom[i]
+            b = bottom[(i + 1) % count]
+            c = top[(i + 1) % count]
+            d = top[i]
+            side = _new_face(bm, (a, b, c, d), _side_normal(a, b, move))
+            if side is not None:
+                side_faces.append(side)
+        _ensure(bm)
+
+        if punch:
+            # Tunnel ends are the hole rim — never invent a second set of verts.
+            _cut_hole_on_plane(bm, top, opp_normal, opp_origin, skip_faces=side_faces)
+            return None
+
+        top_face = _new_face(bm, top, move)
+        if top_face is not None and top_face.is_valid:
+            _select_only_face(bm, top_face)
+        return top_face
+    except (ReferenceError, ValueError, RuntimeError):
+        return None
+
+
+def push_pull(bm, face, distance, copy=False):
+    """Extrude a face into a solid, or push into a shell to chop a pocket/opening."""
+    if face is None or not face.is_valid or abs(distance) < 1e-9:
+        return None
+    try:
+        normal = face.normal.copy()
+    except ReferenceError:
+        return None
+    if normal.length < 1e-12:
+        return None
+    normal.normalize()
+    delta = normal * distance
     working = face
     if copy:
         # SketchUp Ctrl+Push/Pull leaves the original face and extrudes a copy.
@@ -652,15 +1376,25 @@ def push_pull(bm, face, distance, copy=False):
         if not faces:
             return None
         working = faces[0]
-    ret = bmesh.ops.extrude_discrete_faces(bm, faces=[working])
-    faces = ret.get("faces") or []
-    if not faces:
+        # Duplicated face is disconnected — always build a closed prism.
+        return _extrude_face_prism(bm, working, delta, keep_bottom=True)
+
+    try:
+        is_open = _face_is_open(working)
+    except ReferenceError:
         return None
-    top = faces[0]
-    bmesh.ops.translate(bm, verts=list(top.verts), vec=normal * distance)
-    _ensure(bm)
-    _select_only_face(bm, top)
-    return top
+    if is_open:
+        # Lone face / open rim: keep bottom so the result is a closed solid.
+        return _extrude_face_prism(bm, working, delta, keep_bottom=True)
+
+    # Face sits on a shell (e.g. rectangle drawn on a wall): chop into the volume.
+    result = _push_into_shell(bm, working, delta)
+    if result is not None:
+        return result
+    # Fallback if the shell chop hit bad topology (e.g. after a prior boolean).
+    if working.is_valid:
+        return _extrude_face_prism(bm, working, delta, keep_bottom=False)
+    return None
 
 
 def add_polyline(bm, points, close=False, tol=TOL):
@@ -676,6 +1410,13 @@ def add_polyline(bm, points, close=False, tol=TOL):
     return created
 
 
+def _guide_layer(bm):
+    layer = bm.edges.layers.int.get("oform_guide")
+    if layer is None:
+        layer = bm.edges.layers.int.new("oform_guide")
+    return layer
+
+
 def add_guide(bm, a, b, extend=10.0, tol=TOL):
     """Construction line through a–b, extended both ways (SketchUp Tape Measure guide)."""
     p0 = Vector(a)
@@ -686,7 +1427,36 @@ def add_guide(bm, a, b, extend=10.0, tol=TOL):
     direction.normalize()
     start = p0 - direction * extend
     end = p1 + direction * extend
-    return add_segment(bm, start, end, tol=tol)
+    edge = add_segment(bm, start, end, tol=tol)
+    if edge is not None:
+        layer = _guide_layer(bm)
+        edge[layer] = 1
+    return edge
+
+
+def delete_guides(bm):
+    """Remove all construction guides tagged by ``add_guide`` (SketchUp Delete Guides)."""
+    layer = bm.edges.layers.int.get("oform_guide")
+    if layer is None:
+        return 0
+    doomed = [edge for edge in list(bm.edges) if edge[layer] == 1]
+    count = len(doomed)
+    if doomed:
+        bmesh.ops.delete(bm, geom=doomed, context="EDGES")
+        _ensure(bm)
+    return count
+
+
+def reverse_faces(bm, faces=None):
+    """Flip face normals (SketchUp Reverse Faces)."""
+    targets = list(faces) if faces is not None else [f for f in bm.faces if f.select]
+    if not targets:
+        targets = list(bm.faces)
+    for face in targets:
+        if face is not None and face.is_valid:
+            face.normal_flip()
+    _ensure(bm)
+    return len(targets)
 
 
 def ordered_path_coords(edges):
@@ -780,25 +1550,99 @@ def hide_edges(bm, edges, hide=True):
                 vert.hide = False
 
 
+def _line_intersect_2d(a0, a1, b0, b1):
+    """Intersection of infinite lines a0–a1 and b0–b1, or None if parallel."""
+    rax, ray = a1[0] - a0[0], a1[1] - a0[1]
+    rbx, rby = b1[0] - b0[0], b1[1] - b0[1]
+    denom = rax * rby - ray * rbx
+    if abs(denom) < 1e-14:
+        return None
+    dx, dy = b0[0] - a0[0], b0[1] - a0[1]
+    t = (dx * rby - dy * rbx) / denom
+    return (a0[0] + rax * t, a0[1] + ray * t)
+
+
+def _offset_poly_2d(pts, dist):
+    """Even offset of a simple polygon. Positive ``dist`` insets a CCW ring."""
+    count = len(pts)
+    if count < 3:
+        return None
+    poly = list(pts)
+    if _signed_area(poly) < 0.0:
+        poly.reverse()
+        # Caller keeps vert order; we only use geometry here — return None to signal flip needed? 
+        # Work on a local CCW copy and map back by reversing result if needed.
+        reversed_input = True
+    else:
+        reversed_input = False
+    lines = []
+    for i in range(count):
+        a = poly[i]
+        b = poly[(i + 1) % count]
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length = math.hypot(dx, dy)
+        if length < 1e-12:
+            nx, ny = 0.0, 0.0
+        else:
+            # CCW left normal = inward.
+            nx, ny = -dy / length, dx / length
+        ox, oy = nx * dist, ny * dist
+        lines.append(((a[0] + ox, a[1] + oy), (b[0] + ox, b[1] + oy)))
+    out = []
+    for i in range(count):
+        prev = lines[i - 1]
+        cur = lines[i]
+        hit = _line_intersect_2d(prev[0], prev[1], cur[0], cur[1])
+        if hit is None:
+            # Parallel edges: fall back to the offset of the shared vertex.
+            hit = cur[0]
+        out.append(hit)
+    # Reject collapsed / inverted offsets.
+    if abs(_signed_area(out)) < 1e-10:
+        return None
+    if dist > 0.0 and _signed_area(out) * _signed_area(poly) < 0.0:
+        return None
+    if reversed_input:
+        out.reverse()
+    return out
+
+
 def offset_face(bm, face, distance):
+    """Offset every edge of a face (SketchUp Offset). Positive = inset."""
     if face is None or not face.is_valid or abs(distance) < 1e-9:
         return None
-    ret = bmesh.ops.inset_region(
-        bm,
-        faces=[face],
-        thickness=abs(distance),
-        depth=0.0,
-        use_even_offset=True,
-        use_outset=distance < 0.0,
-    )
-    faces = [f for f in ret.get("faces", []) if f.is_valid]
+    normal = face.normal.copy()
+    origin, u, v, pts2d = _face_frame(face)
+    verts = [loop.vert for loop in face.loops]
+    count = len(verts)
+    if count < 3:
+        return None
+    # Match winding used by the offset helper.
+    poly = list(pts2d)
+    order = list(range(count))
+    if _signed_area(poly) < 0.0:
+        poly.reverse()
+        order.reverse()
+    inset = _offset_poly_2d(poly, distance)
+    if inset is None:
+        return None
+    # Map inset points back to original loop order.
+    ordered_inset = [None] * count
+    for i, idx in enumerate(order):
+        ordered_inset[idx] = inset[i]
+    inner_verts = []
+    for i in range(count):
+        p = ordered_inset[i]
+        inner_verts.append(bm.verts.new(origin + u * p[0] + v * p[1]))
+    bm.faces.remove(face)
+    for i in range(count):
+        a = verts[i]
+        b = verts[(i + 1) % count]
+        c = inner_verts[(i + 1) % count]
+        d = inner_verts[i]
+        _new_face(bm, (a, b, c, d), normal)
+    inner = _new_face(bm, inner_verts, normal)
     _ensure(bm)
-    inner = None
-    for item in faces:
-        if item is not face and item.is_valid:
-            inner = item
-    if inner is None and face.is_valid:
-        inner = face
     _select_only_face(bm, inner)
     return inner
 

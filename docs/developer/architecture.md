@@ -148,16 +148,26 @@ Imported as `bl_app_templates_system.oform`. `register()` must not touch `bpy.co
 | `__init__.py` | Register / unregister |
 | `brand.py` | Colors, mark, product strings, theme |
 | `ui.py` | Menus, left pane, splash/About/status |
-| `tools.py` | Modal tools / operators (`oform.*`) |
+| `tools.py` | Modal tools / operators (`oform.*`); tool lifecycle |
 | `geom.py` | BMesh edits |
-| `inference.py` | Snap helpers |
+| `inference.py` | Working planes, snaps, locks, inference guides |
+| `selection.py` | Click-count selection (entity / related / connected) |
+| `solids.py` | Manifold check + Boolean union/difference/intersect |
+| `groups.py` | Groups / components / edit context |
+| `bim/` | Native BIM engine — storeys, IFC, ShilpiDB; suite take-off (`suite_ids` / `takeoff`) coherent with O-Draft + O-CoreOp |
+| `ai.py` | Ask channel proposals |
 | `selftest.py` | Headless mesh contract |
+
+**Shared modelling pipeline:** pointer → hit test → inference (plane + snaps) → preview → commit → undo transaction. Tools must not reimplement click counting or plane logic locally.
 
 ### Identity hooks (C++)
 
 Internal symbols stay Blender’s; product naming is thin:
 
-- Default app template `oform`  
+- Default app template `oform` (only system template shipped — modeling only)
+- Unused Blender UI/addons are **unregistered or deleted**, not hidden (no animation templates, no BVH/pose/rigify/VR/node-wrangler addons; View3D tool shelf / N-panel / asset shelf not created for oform)
+
+  
 - Window title / About label `O-Form`  
 - Properties chrome adjustments when `U.app_template == "oform"`  
 

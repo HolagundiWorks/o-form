@@ -17,35 +17,47 @@ import zlib
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Suite shell tokens (aligned with O-Draft Fluent graphite / off-white).
-# Light
-FOG = (243, 243, 243)       # #F3F3F3 app background
-SOFT = (249, 249, 249)      # #F9F9F9 surface / side pane
-WHITE = (255, 255, 255)
-INK = (26, 26, 26)          # #1A1A1A
-MUTED = (92, 92, 92)        # #5C5C5C
-EDGE = (209, 209, 209)      # #D1D1D1
-# O-Form product accent (pastel green) + O-Draft AI channel blue.
-ACCENT = (198, 230, 211)    # #C6E6D3 plate / soft highlight
-ACCENT_ON = (143, 203, 170)  # #8FCBAA selected control fill
-ACCENT_PRESS = (176, 216, 193)
-SELECT = (63, 163, 106)     # #3FA36A selection / outline_sel
-AI_ACCENT = (0, 120, 212)   # #0078D4 Ask channel (light)
+# O-Draft WinUI ColorTokens.xaml (+ O-Form mark plate green for the suite logo).
+# Light — OSAS glass soft-UI (Hcw.Ui SuiteColors)
+FOG = (228, 234, 242)          # #E4EAF2 AppBackground
+SOFT = (238, 242, 248)         # #EEF2F8 Surface / side pane
+SOFT_SECONDARY = (241, 245, 250)  # #F1F5FA SurfaceSecondary / tool strip
+WHITE = (255, 255, 255)        # SurfaceElevated / ControlSelected (light)
+INK = (26, 35, 50)             # #1A2332 TextPrimary / AccentBrush (light)
+MUTED = (100, 116, 139)        # #64748B TextSecondary
+MUTED_FAINT = (148, 163, 184)  # #94A3B8 TextMuted
+EDGE = (216, 222, 232)         # #D8DEE8 BorderDefault
+# Suite mark plate (logo only — not chrome accent)
+MARK_PLATE = (198, 230, 211)   # #C6E6D3
+MARK_PLATE_ON = (143, 203, 170)
+ACCENT = INK                   # chrome accent = O-Draft AccentBrush
+ACCENT_ON = MARK_PLATE_ON      # soft highlight on light controls
+ACCENT_PRESS = (216, 222, 232) # #D8DEE8 ControlPressed
+SELECT = INK                   # viewport selection (light)
+SELECTED_CTRL = WHITE          # ControlSelectedBrush light
+AI_ACCENT = INK                # CommandChromeAccentBrush light
+CAD_ACCENT = (15, 123, 58)     # #0F7B3A CadChannelBrush
 CANVAS_LIGHT = (255, 255, 255)
-# Dark (O-Draft graphite)
-FOG_DARK = (27, 27, 27)     # #1B1B1B
-SOFT_DARK = (32, 32, 32)    # #202020
-SURFACE_DARK = (44, 44, 44) # #2C2C2C
-INK_DARK = (243, 243, 243)  # #F3F3F3
-MUTED_DARK = (200, 200, 200)
-EDGE_DARK = (61, 61, 61)    # #3D3D3D
-AI_ACCENT_DARK = (96, 205, 255)  # #60CDFF
+# Dark — O-Draft graphite + Windows blue accent
+FOG_DARK = (27, 27, 27)        # #1B1B1B
+SOFT_DARK = (32, 32, 32)       # #202020
+SOFT_SECONDARY_DARK = (42, 42, 42)  # #2A2A2A
+SURFACE_DARK = (44, 44, 44)    # #2C2C2C
+INK_DARK = (243, 243, 243)     # #F3F3F3
+MUTED_DARK = (200, 200, 200)   # #C8C8C8
+MUTED_FAINT_DARK = (154, 154, 154)  # #9A9A9A
+EDGE_DARK = (61, 61, 61)       # #3D3D3D
+AI_ACCENT_DARK = (96, 205, 255)  # #60CDFF Accent / Ask
+CAD_ACCENT_DARK = (108, 203, 138)  # #6CCB8A
 CANVAS_DARK = (0, 0, 0)
-SELECT_DARK = (96, 205, 255)
+SELECT_DARK = AI_ACCENT_DARK
+SELECTED_CTRL_DARK = (26, 59, 92)  # #1A3B5C ControlSelectedBrush
+# Back-compat aliases used by icon / mark generators
+ACCENT_MARK = MARK_PLATE
 
 PRODUCT = "O-Form"
-SUBTITLE = "Modeling"
-TAGLINE = "Push/pull solid modeling"
+SUBTITLE = "3D Modelling"
+TAGLINE = "Architectural solid modelling"
 PRINCIPLE = "Open Source. Built for Architects. Driven by Community."
 SUITE = "OSAS · Open Source Architecture Suit"
 DEVELOPER = "Human Centric Works"
@@ -71,7 +83,7 @@ def _unit(color):
 
 
 def accent_rgb():
-    return _unit(ACCENT)
+    return _unit(MARK_PLATE)
 
 
 def _in_mark(x, y):
@@ -138,7 +150,7 @@ def mark_svg(name=PRODUCT, plate=None, ink=None):
     Sister apps use white strokes on saturated plates; O-Form uses ink on the
     pastel green plate so the glyph stays readable.
     """
-    plate = plate or ACCENT
+    plate = plate or MARK_PLATE
     ink = ink or INK
     fill = "#{:02X}{:02X}{:02X}".format(*plate)
     stroke = "#{:02X}{:02X}{:02X}".format(*ink)
@@ -180,7 +192,7 @@ def _splash_rgba(width=960, height=420):
     for i in range(0, len(out), 4):
         out[i:i + 4] = bytes((255, 255, 255, 255))
     mark_size = min(height - 40, 280)
-    mark = _rounded(mark_size, ACCENT, INK)
+    mark = _rounded(mark_size, MARK_PLATE, INK)
     ox = 48
     oy = (height - mark_size) // 2
     for py in range(mark_size):
@@ -212,7 +224,7 @@ def write_assets(extra_dirs=None):
     for dest in destinations:
         os.makedirs(dest, exist_ok=True)
 
-    mark_256 = _rounded(256, ACCENT, INK)
+    mark_256 = _rounded(256, MARK_PLATE, INK)
     mark_png = _png(256, 256, mark_256)
     splash = _png(960, 420, _splash_rgba(960, 420))
     svg = mark_svg()
@@ -220,7 +232,7 @@ def write_assets(extra_dirs=None):
     sizes = (16, 24, 32, 48, 64, 128, 256)
     ico_frames = []
     for size in sizes:
-        rgba = _rounded(size, ACCENT, INK)
+        rgba = _rounded(size, MARK_PLATE, INK)
         ico_frames.append((size, _png(size, size, rgba)))
     ico_bytes = _ico(ico_frames)
 
@@ -323,26 +335,30 @@ def set_dark(context, dark):
 
 
 def palette(dark):
-    """Shell + canvas colours for the active theme."""
+    """Shell + canvas colours — O-Draft ColorTokens.xaml roles."""
     if dark:
         return {
             "fog": FOG_DARK,
             "soft": SOFT_DARK,
+            "soft_secondary": SOFT_SECONDARY_DARK,
             "surface": SURFACE_DARK,
             "ink": INK_DARK,
             "muted": MUTED_DARK,
             "edge": EDGE_DARK,
-            "accent": ACCENT,
-            "accent_on": ACCENT_ON,
+            "accent": AI_ACCENT_DARK,
+            "accent_on": SELECTED_CTRL_DARK,
             "select": SELECT_DARK,
+            "selected": SELECTED_CTRL_DARK,
             "canvas": CANVAS_DARK,
             "ai": AI_ACCENT_DARK,
+            "cad": CAD_ACCENT_DARK,
             "header": FOG_DARK,
             "panel": SOFT_DARK,
         }
     return {
         "fog": FOG,
         "soft": SOFT,
+        "soft_secondary": SOFT_SECONDARY,
         "surface": WHITE,
         "ink": INK,
         "muted": MUTED,
@@ -350,8 +366,10 @@ def palette(dark):
         "accent": ACCENT,
         "accent_on": ACCENT_ON,
         "select": SELECT,
+        "selected": SELECTED_CTRL,
         "canvas": CANVAS_LIGHT,
         "ai": AI_ACCENT,
+        "cad": CAD_ACCENT,
         "header": WHITE,
         "panel": SOFT,
     }
@@ -380,8 +398,8 @@ def apply_theme(context, dark=None):
             widget,
             colors["surface"],
             colors["ink"],
-            inner_sel=colors["accent_on"],
-            text_sel=INK if not dark else INK,
+            inner_sel=colors["selected"],
+            text_sel=colors["ink"] if dark else INK,
             outline=colors["edge"],
         )
     _paint(ui, "editor_border", _unit(colors["edge"]))
@@ -398,6 +416,8 @@ def apply_theme(context, dark=None):
     if hasattr(ui, "panel_roundness"):
         ui.panel_roundness = 0.15
 
+    # Blender 5.x dropped per-editor panel colours and some ThemeSpace.back
+    # slots (view_3d has gradients only). Paint what still exists.
     for space_name in ("topbar", "view_3d", "properties", "statusbar", "outliner", "preferences"):
         space = getattr(theme, space_name, None)
         if space is None:
@@ -411,17 +431,30 @@ def apply_theme(context, dark=None):
         _paint(slot, "title", _unit(colors["ink"]))
         _paint(slot, "text", _unit(colors["ink"]))
         _paint(slot, "text_hi", _unit(colors["ink"]))
-        _paint(slot, "back", _unit(back))
+        if hasattr(slot, "back"):
+            _paint(slot, "back", _unit(back))
         gradients = getattr(slot, "gradients", None)
-        if gradients is not None and hasattr(gradients, "background_type"):
-            try:
-                gradients.background_type = "SINGLE_COLOR"
-            except (TypeError, ValueError):
-                pass
+        if gradients is not None:
+            if hasattr(gradients, "background_type"):
+                try:
+                    gradients.background_type = "SINGLE_COLOR"
+                except (TypeError, ValueError):
+                    pass
             # SketchUp / O-Draft canvas: solid paper, independent of chrome.
             canvas = colors["canvas"] if space_name == "view_3d" else colors["fog"]
             _paint(gradients, "high_gradient", _unit(canvas))
             _paint(gradients, "gradient", _unit(canvas))
+    # Tabs (5.x) sit next to the tool strip / BIM strip.
+    tab = getattr(ui, "wcol_tab", None)
+    if tab is not None and hasattr(tab, "inner"):
+        _widget(
+            tab,
+            colors["soft"],
+            colors["ink"],
+            inner_sel=colors["selected"],
+            text_sel=colors["ink"] if dark else INK,
+            outline=colors["edge"],
+        )
 
     view = getattr(theme, "view_3d", None)
     if view is not None:

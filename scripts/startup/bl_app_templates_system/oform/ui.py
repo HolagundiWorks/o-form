@@ -4,9 +4,9 @@
 
 """Menus, sidebars, status bar, keymap, theme, Ask AI, and factory scene.
 
-Layout mirrors O-Draft: menu → left tool/side pane → canvas → status, with a
-fixed Ask strip over the viewport. Canvas is SketchUp-like (solid paper, axes,
-no ground grid).
+Layout mirrors O-Draft: menu → left modelling tools + side pane → canvas →
+right BIM panel → status, with a fixed Ask strip over the viewport. Canvas is
+SketchUp-like (solid paper, axes, no ground grid).
 """
 
 import traceback
@@ -18,14 +18,18 @@ from bpy.types import Menu, Operator, Panel
 
 import ai
 import brand
+import design
 
 _DRAW = []
 _KEYMAPS = []
 _SAVED_KEYS = []
 _UI = False
 _ASK_HANDLERS = []
-_SIDE_WIDTH = 0.062  # SketchUp Large Tool Set — left icon rail
-_ICON_SCALE = 1.65  # Equal X/Y scale → roughly square icon buttons
+# O-Draft Density: 32 DIP tool strip + 280 DIP side panel (see design.py).
+_SIDE_WIDTH = design.LEFT_STACK_RATIO
+_ICON_SCALE = design.ICON_SCALE
+_SIDE_MAX_RATIO = design.LEFT_STACK_MAX_RATIO
+
 
 # SketchUp Large Tool Set order (icon-only). Separators match the reference strip.
 # https://help.sketchup.com/en/sketchup/getting-started-toolbar
@@ -146,6 +150,19 @@ _TOOL_ICONS = {
     "oform.tool_pan": "VIEW_PAN",
     "oform.tool_zoom": "VIEWZOOM",
     "oform.tool_zoom_extents": "ZOOM_ALL",
+    # BIM toolbar
+    "oform.bim_classify": "OUTLINER_OB_MESH",
+    "oform.bim_set_class": "BOOKMARKS",
+    "oform.bim_assign_storey": "HOME",
+    "oform.bim_inspect": "INFO",
+    "oform.bim_suite_push": "EXPORT",
+    "oform.bim_takeoff_status": "FILE_TICK",
+    "oform.open_project": "FILE_FOLDER",
+    "oform.live_sync_toggle": "FILE_REFRESH",
+    "oform.bim_export_ifc": "EXPORT",
+    "oform.bim_import_ifc": "IMPORT",
+    "oform.bim_ensure_project": "NEWFOLDER",
+    "oform.bim_add_storey": "ADD",
 }
 
 
@@ -216,7 +233,10 @@ def _release_tool_icons():
 
 # (idname, key, shift, ctrl). Shift+Z and Ctrl+G are the modified shortcuts.
 # SketchUp-aligned defaults: https://help.sketchup.com/en/default-keyboard-shortcuts
+# SketchUp defaults + Reddit power-user mappings (U/Shift+U, Y, Shift+V, hide rest).
 _SHORTCUTS = (
+    ("oform.cancel_command", "ESC", False, False),
+    ("oform.bim_context_menu", "RIGHTMOUSE", False, False),
     ("oform.tool_select", "SPACE", False, False),
     ("oform.tool_eraser", "E", False, False),
     ("oform.tool_paint", "B", False, False),
@@ -242,6 +262,18 @@ _SHORTCUTS = (
     ("oform.tool_pan", "H", False, False),
     ("oform.tool_zoom", "Z", False, False),
     ("oform.tool_zoom_extents", "Z", True, False),
+    # Power-user (r/Sketchup + QRC workflows)
+    ("oform.unhide_last", "U", False, False),
+    ("oform.unhide_all", "U", True, False),
+    ("oform.hide_selected", "H", False, True),
+    ("oform.hide_rest", "H", True, True),
+    ("oform.reverse_faces", "Y", False, False),
+    ("oform.paste_in_place", "V", True, False),
+    ("oform.copy_selection", "C", False, True),
+    ("oform.delete_guides", "G", True, True),
+    ("oform.face_style", "X", True, True),
+    ("oform.previous_view", "LEFT_BRACKET", False, False),
+    ("oform.zoom_window", "W", False, False),
 )
 
 _PLAIN_KEYS = {item[1] for item in _SHORTCUTS if not item[2] and not item[3]}
@@ -266,14 +298,23 @@ class OFORM_MT_file(Menu):
         layout = self.layout
         layout.operator("wm.read_homefile", text="New")
         layout.operator("wm.open_mainfile", text="Open...")
+        layout.operator("oform.open_project", text="Open Project Folder…")
         layout.separator()
         layout.operator("wm.save_mainfile", text="Save")
         layout.operator("wm.save_as_mainfile", text="Save As...")
+        layout.operator("oform.save_project_model", text="Save into Project")
         layout.separator()
         if _operator_exists("wm.obj_export"):
             layout.operator("wm.obj_export", text="Export OBJ...")
         if _operator_exists("export_scene.gltf"):
             layout.operator("export_scene.gltf", text="Export glTF...")
+        layout.separator()
+        layout.operator("oform.bim_import_ifc", text="Import IFC…")
+        layout.operator("oform.bim_export_ifc", text="Export IFC…")
+        layout.separator()
+        layout.operator("oform.bim_shilpi_connect", text="ShilpiDB Connect")
+        layout.operator("oform.bim_suite_push", text="Push BIM + Take-off")
+        layout.operator("oform.live_sync_toggle", text="Toggle Live Sync")
         layout.separator()
         layout.operator("wm.quit_blender", text="Quit")
 
@@ -287,7 +328,17 @@ class OFORM_MT_edit(Menu):
         layout.operator("ed.undo", text="Undo")
         layout.operator("ed.redo", text="Redo")
         layout.separator()
+        layout.operator("oform.copy_selection", text="Copy")
+        layout.operator("oform.paste_in_place", text="Paste in Place")
         layout.operator("oform.delete_selection", text="Delete", icon="TRASH")
+        layout.separator()
+        layout.operator("oform.hide_selected", text="Hide")
+        layout.operator("oform.unhide_last", text="Unhide Last")
+        layout.operator("oform.unhide_all", text="Unhide All")
+        layout.operator("oform.hide_rest", text="Hide Rest of Model")
+        layout.separator()
+        layout.operator("oform.reverse_faces", text="Reverse Faces")
+        layout.operator("oform.delete_guides", text="Delete Guides")
         layout.separator()
         layout.operator("oform.make_group", text="Make Group")
         layout.operator("oform.make_component", text="Make Component")
@@ -296,11 +347,6 @@ class OFORM_MT_edit(Menu):
         layout.separator()
         layout.operator("oform.enter_group", text="Edit Group/Component")
         layout.operator("oform.exit_group", text="Close Group/Component")
-        layout.separator()
-        layout.operator("oform.boolean_union", text="Solid Union")
-        layout.operator("oform.boolean_subtract", text="Solid Subtract")
-        layout.operator("oform.boolean_intersect", text="Solid Intersect")
-        layout.operator("oform.solid_inspect", text="Inspect Solid")
 
 
 class OFORM_MT_solids(Menu):
@@ -318,10 +364,104 @@ class OFORM_MT_solids(Menu):
             text="Intersect",
             icon=_tool_icon("oform.boolean_intersect"),
         )
+        layout.operator("oform.boolean_trim", text="Trim")
+        layout.operator("oform.boolean_outer_shell", text="Outer Shell")
         layout.separator()
         layout.operator(
             "oform.solid_inspect", text="Inspect Solid", icon=_tool_icon("oform.solid_inspect")
         )
+
+
+class OFORM_MT_bim_ifc_map(Menu):
+    bl_idname = "OFORM_MT_bim_ifc_map"
+    bl_label = "Map to IFC Component"
+
+    def draw(self, _context):
+        from bim import taxonomy
+
+        layout = self.layout
+        layout.label(text="Map selection to…")
+        layout.separator()
+        for key, label in taxonomy.ELEMENTS:
+            op = layout.operator("oform.bim_map_to", text=label)
+            op.ifc_class = key
+
+
+class OFORM_MT_bim_context(Menu):
+    """Right-click BIM menu — map selected geometry to an IFC component."""
+
+    bl_idname = "OFORM_MT_bim_context"
+    bl_label = "BIM"
+
+    def draw(self, context):
+        from bim import props as bim_props
+        from bim import taxonomy
+        import groups
+
+        layout = self.layout
+        entity = groups.get_entity(context)
+        obj = entity
+        if obj is None:
+            selected = [o for o in context.selected_objects if o.type == "MESH"]
+            obj = selected[0] if selected else context.view_layer.objects.active
+        if obj is not None and obj.type == "MESH":
+            ifc = bim_props.ifc_class_of(obj)
+            layout.label(text=obj.name)
+            layout.label(
+                text="IFC: " + (taxonomy.label_of(ifc) if ifc else "(untyped)")
+            )
+            storey = bim_props.storey_of(obj)
+            if storey:
+                layout.label(text="Storey: " + storey)
+            layout.separator()
+        else:
+            layout.label(text="No mesh selected")
+            tip = layout.column()
+            tip.enabled = False
+            tip.label(text="Select faces or a component")
+            layout.separator()
+
+        layout.menu("OFORM_MT_bim_ifc_map", text="Map to IFC Component")
+        layout.operator("oform.bim_classify", text="Auto-Classify")
+        layout.operator("oform.bim_set_class", text="Set IFC Class…")
+        layout.operator("oform.bim_assign_storey", text="Assign to Active Storey")
+        layout.operator("oform.bim_inspect", text="Inspect Element")
+        layout.separator()
+        layout.operator("oform.bim_ensure_project", text="Initialize Project")
+        layout.operator("oform.bim_export_ifc", text="Export IFC…")
+        layout.operator("oform.bim_import_ifc", text="Import IFC…")
+        layout.separator()
+        layout.operator("oform.bim_suite_push", text="Push BIM + Take-off")
+
+
+class OFORM_MT_bim(Menu):
+    bl_idname = "OFORM_MT_bim"
+    bl_label = "BIM"
+
+    def draw(self, _context):
+        layout = self.layout
+        layout.operator("oform.bim_ensure_project", text="Initialize Project")
+        layout.operator("oform.bim_add_storey", text="Add Storey…")
+        layout.separator()
+        layout.menu("OFORM_MT_bim_ifc_map", text="Map to IFC Component")
+        layout.operator("oform.bim_classify", text="Auto-Classify Selection")
+        layout.operator("oform.bim_set_class", text="Set IFC Class…")
+        layout.operator("oform.bim_assign_storey", text="Assign to Active Storey")
+        layout.operator("oform.bim_inspect", text="Inspect Element")
+        layout.separator()
+        layout.operator("oform.bim_import_ifc", text="Import IFC…")
+        layout.operator("oform.bim_export_ifc", text="Export IFC…")
+        layout.separator()
+        layout.operator("oform.bim_shilpi_connect", text="Connect ShilpiDB")
+        layout.operator("oform.bim_suite_push", text="Push BIM + Take-off")
+        layout.operator("oform.bim_takeoff_push", text="Push Take-off (suite)")
+        layout.operator("oform.bim_takeoff_status", text="Take-off Status")
+        layout.operator("oform.bim_suite_list", text="List Suite Take-offs")
+        layout.operator("oform.bim_shilpi_push", text="Push IFC Sidecar")
+        layout.operator("oform.bim_shilpi_pull", text="Pull IFC Sidecar")
+        layout.operator("oform.bim_set_office_id", text="AORMS Project Id…")
+        layout.separator()
+        layout.label(text="Tip: right-click in the view for BIM")
 
 
 class OFORM_MT_view(Menu):
@@ -333,17 +473,29 @@ class OFORM_MT_view(Menu):
         layout.operator("oform.tool_orbit", text="Orbit", icon=_tool_icon("oform.tool_orbit"))
         layout.operator("oform.tool_pan", text="Pan", icon=_tool_icon("oform.tool_pan"))
         layout.operator("oform.tool_zoom", text="Zoom", icon=_tool_icon("oform.tool_zoom"))
+        layout.operator("oform.zoom_window", text="Zoom Window")
         layout.operator(
             "oform.tool_zoom_extents",
             text="Zoom Extents",
             icon=_tool_icon("oform.tool_zoom_extents"),
         )
+        layout.operator("oform.previous_view", text="Previous View")
         layout.separator()
         layout.operator(
             "oform.tool_back_edges",
             text="Back Edges",
             icon=_tool_icon("oform.tool_back_edges"),
         )
+        layout.separator()
+        layout.label(text="Face Style")
+        op = layout.operator("oform.face_style", text="Shaded")
+        op.style = "shaded"
+        op = layout.operator("oform.face_style", text="X-Ray")
+        op.style = "xray"
+        op = layout.operator("oform.face_style", text="Wireframe")
+        op.style = "wire"
+        op = layout.operator("oform.face_style", text="Monochrome")
+        op.style = "mono"
 
 
 class OFORM_MT_camera(Menu):
@@ -399,6 +551,59 @@ class OFORM_MT_tools(Menu):
         layout.operator("oform.tool_protractor", text="Protractor", icon=_tool_icon("oform.tool_protractor"))
 
 
+class OFORM_MT_units(Menu):
+    bl_idname = "OFORM_MT_units"
+    bl_label = "Units"
+
+    def draw(self, context):
+        import units as units_mod
+
+        layout = self.layout
+        current = units_mod.current_unit(context.scene)
+        layout.label(text="Model unit (bare numbers)")
+        layout.separator()
+        for key, label, _scale in units_mod.UNIT_CHOICES:
+            op = layout.operator(
+                "oform.set_units",
+                text=label,
+                depress=key == current,
+            )
+            op.unit = key
+        layout.separator()
+        tip = layout.column()
+        tip.enabled = False
+        tip.label(text="VCB always accepts mixed units:")
+        tip.label(text="10'  ·  6\"  ·  5'6\"  ·  100mm  ·  2.5m")
+
+
+class OFORM_OT_set_units(Operator):
+    bl_idname = "oform.set_units"
+    bl_label = "Set Units"
+    bl_description = "Set the model length unit for bare VCB numbers and display"
+    bl_options = {"REGISTER"}
+
+    unit: EnumProperty(
+        name="Unit",
+        items=(
+            ("m", "Meters", "Bare numbers are metres"),
+            ("mm", "Millimeters", "Bare numbers are millimetres"),
+            ("cm", "Centimeters", "Bare numbers are centimetres"),
+            ("ft", "Feet", "Bare numbers are feet"),
+            ("in", "Inches", "Bare numbers are inches"),
+        ),
+        default="m",
+    )
+
+    def execute(self, context):
+        import units as units_mod
+
+        key = units_mod.set_unit(context.scene, self.unit)
+        msg = "Units: " + units_mod.label_of(key)
+        context.scene.oform_status = msg
+        self.report({"INFO"}, msg)
+        return {"FINISHED"}
+
+
 class OFORM_MT_window(Menu):
     bl_idname = "OFORM_MT_window"
     bl_label = "Window"
@@ -410,6 +615,11 @@ class OFORM_MT_window(Menu):
             "oform.toggle_theme",
             text="Light Theme" if dark else "Dark Theme",
         ).mode = "LIGHT" if dark else "DARK"
+        layout.separator()
+        layout.menu("OFORM_MT_units", text="Units")
+        layout.separator()
+        layout.label(text="BIM Toolbar")
+        _draw_bim_toolbar_row(layout, icon_only=False)
         layout.separator()
         layout.operator("wm.window_fullscreen_toggle", text="Toggle Full Screen")
         layout.operator("oform.preferences_hint", text="Preferences...")
@@ -438,10 +648,14 @@ class OFORM_MT_help(Menu):
         layout.label(text="Select: click · double related · triple connected (Alt+1/2/3).")
         layout.label(text="Draw on a face to lock that working plane.")
         layout.label(text="Ask: type in the left Ask panel. Allow/Decline confirms changes.")
-        layout.label(text="Ctrl Move/PushPull copies. Eraser: Ctrl soften, Shift hide.")
-        layout.label(text="Arrow keys lock an axis. Type a length, then Enter (VCB in status).")
-        layout.label(text="Solids: two meshes Object mode → rail Union / Subtract / Intersect.")
-        layout.label(text="Hover a tool icon for its description. Shortcuts listed above.")
+        layout.label(text="Ctrl Move/Rotate/PushPull copies. After copy: 5x or 3/ then Enter.")
+        layout.label(text="Shift locks inference. Arrows lock axes. Type length → Enter (VCB).")
+        layout.label(text="U Unhide Last · Shift+U All · Ctrl+H Hide · Ctrl+Shift+H Hide Rest")
+        layout.label(text="Y Reverse Faces · Shift+V Paste in Place · Ctrl+Shift+X Face Style")
+        layout.label(text="Solids: Union / Subtract / Intersect / Trim · Inspect for manifold.")
+        layout.label(text="Push/Pull: double-click face to repeat last distance.")
+        layout.label(text="Right-click: BIM menu · Map selection to IFC component.")
+        layout.label(text="Units: Window → Units. VCB: 10'  6\"  5'6\"  100mm  2.5m")
 
 
 _MENUS = (
@@ -452,6 +666,10 @@ _MENUS = (
     OFORM_MT_draw,
     OFORM_MT_tools,
     OFORM_MT_solids,
+    OFORM_MT_bim_ifc_map,
+    OFORM_MT_bim_context,
+    OFORM_MT_bim,
+    OFORM_MT_units,
     OFORM_MT_window,
     OFORM_MT_help,
 )
@@ -502,13 +720,19 @@ def _draw_about(self, _context):
     column.label(text=brand.LICENSE_LINE)
 
 
-def _draw_properties_header(self, _context):
-    # Pane header: the mark, the product name, and the one-line role.
+def _draw_properties_header(self, context):
+    # Modelling tool strip: no header chrome. Side / BIM panes: mark + product.
+    role = _props_role(context)
+    if role == "tools":
+        return
     row = self.layout.row(align=True)
     try:
-        row.template_icon(icon_value=brand.icon_id(), scale=1.6)
+        row.template_icon(icon_value=brand.icon_id(), scale=1.4)
     except Exception:
         pass
+    if role == "bim":
+        row.label(text="BIM")
+        return
     row.label(text=brand.PRODUCT)
     subtitle = row.row()
     subtitle.enabled = False
@@ -543,28 +767,33 @@ def _draw_view3d_header(self, context):
 
 
 def _draw_status(self, context):
+    import units as units_mod
+
     layout = self.layout
     scene = context.scene
     status = getattr(scene, "oform_status", "") if scene is not None else ""
     measure = getattr(scene, "oform_measure", "") if scene is not None else ""
-    layout.label(text=status)
+    layout.label(text=status or "Ready")
     layout.separator_spacer()
-    theme_row = layout.row(align=True)
+    units_mod.draw_status_chips(layout, scene)
+    layout.separator()
     dark = brand.is_dark(context)
+    theme_row = layout.row(align=True)
     theme_row.operator(
         "oform.toggle_theme",
-        text="Dark" if not dark else "Light",
+        text="Light",
+        depress=not dark,
+    ).mode = "LIGHT"
+    theme_row.operator(
+        "oform.toggle_theme",
+        text="Dark",
         depress=dark,
-    ).mode = "TOGGLE"
-    layout.separator()
-    credit = layout.row()
-    credit.enabled = False
-    credit.label(text=brand.COMPANY_LINE)
+    ).mode = "DARK"
     layout.separator()
     # Visible VCB (Measurements) — SketchUp-style typed dimensions surface.
     box = layout.row(align=True)
     box.alignment = "RIGHT"
-    box.ui_units_x = 18
+    box.ui_units_x = 14
     if measure:
         box.label(text="VCB  " + measure, icon="DRIVER_DISTANCE")
     else:
@@ -611,6 +840,10 @@ def _conflicts(kmi):
         return False
     if kmi.idname == "object.mode_set" and kmi.type == "TAB":
         return True
+    # Prefer O-Form cancel over Blender's screen.animation_cancel / view3d escapes
+    # when no modal operator is active (modals still receive Esc first).
+    if kmi.type == "ESC" and not kmi.ctrl and not kmi.alt and not kmi.shift:
+        return True
     if kmi.type not in _PLAIN_KEYS:
         return False
     if kmi.ctrl or kmi.alt or kmi.oskey or getattr(kmi, "hyper", False):
@@ -653,11 +886,44 @@ def _addon_has_tools():
     return False
 
 
-def _setup_keymap():
-    if _addon_has_tools():
-        return
+def _addon_has_cancel():
     addon = bpy.context.window_manager.keyconfigs.addon
     if addon is None:
+        return False
+    for keymap in addon.keymaps:
+        for kmi in keymap.keymap_items:
+            if kmi.idname == "oform.cancel_command" and kmi.type == "ESC":
+                return True
+    return False
+
+
+def _ensure_esc_cancel(addon):
+    """Bind Esc → cancel and right-click → BIM when the tool keymap already exists."""
+    _deactivate_conflicts()
+    for name, space in (("Window", "EMPTY"), ("3D View", "VIEW_3D")):
+        keymap = addon.keymaps.new(name=name, space_type=space, region_type="WINDOW")
+        if keymap not in _KEYMAPS:
+            _KEYMAPS.append(keymap)
+        has_esc = any(
+            kmi.idname == "oform.cancel_command" and kmi.type == "ESC"
+            for kmi in keymap.keymap_items
+        )
+        has_bim = any(
+            kmi.idname == "oform.bim_context_menu" and kmi.type == "RIGHTMOUSE"
+            for kmi in keymap.keymap_items
+        )
+        if not has_esc:
+            keymap.keymap_items.new("oform.cancel_command", "ESC", "PRESS")
+        if not has_bim:
+            keymap.keymap_items.new("oform.bim_context_menu", "RIGHTMOUSE", "PRESS")
+
+
+def _setup_keymap():
+    addon = bpy.context.window_manager.keyconfigs.addon
+    if addon is None:
+        return
+    if _addon_has_tools():
+        _ensure_esc_cancel(addon)
         return
     _deactivate_conflicts()
     window_map = addon.keymaps.new(name="Window", space_type="EMPTY", region_type="WINDOW")
@@ -748,29 +1014,115 @@ def _close_extra_areas(context):
             return
 
 
-def _draw_large_tool_set(layout, context):
-    """SketchUp Large Tool Set: compact square icon buttons (equal scale_x/y)."""
-    active = _active_tool(context)
-    column = layout.column(align=True)
-    column.scale_x = _ICON_SCALE
-    column.scale_y = _ICON_SCALE
-    for item in _LARGE_TOOL_SET:
+def _area_width(context):
+    area = getattr(context, "area", None)
+    return int(getattr(area, "width", 0) or 0)
+
+
+def _props_role(context):
+    """Return 'tools' | 'side' | 'bim' for the current PROPERTIES area.
+
+    Shell: [modelling strip | side panel | canvas | BIM panel].
+    """
+    area = getattr(context, "area", None)
+    screen = getattr(context, "screen", None)
+    if area is None or screen is None or area.type != "PROPERTIES":
+        return None
+    props = sorted(
+        [item for item in screen.areas if item.type == "PROPERTIES"],
+        key=lambda item: item.x,
+    )
+    if not props:
+        return None
+    ptr = area.as_pointer()
+    narrow = design.TOOL_STRIP_MAX_W
+    if len(props) >= 3:
+        if ptr == props[0].as_pointer():
+            return "tools"
+        if ptr == props[-1].as_pointer():
+            return "bim"
+        return "side"
+    if len(props) == 2:
+        left, right = props[0], props[1]
+        if ptr == left.as_pointer():
+            return "tools" if left.width < narrow else "side"
+        # Right pane is BIM when it sits past the canvas, else side.
+        views = [item for item in screen.areas if item.type == "VIEW_3D"]
+        if views and right.x > max(views, key=lambda item: item.width).x:
+            return "bim"
+        return "side"
+    return "tools" if area.width < narrow else "side"
+
+
+def _poll_tool_strip(context):
+    """Leftmost narrow PROPERTIES = modelling tool strip."""
+    return _props_role(context) == "tools"
+
+
+def _poll_bim_panel(context):
+    """Right PROPERTIES pane = BIM panel."""
+    return _props_role(context) == "bim"
+
+
+def _poll_side_panel(context):
+    """Left PROPERTIES pane = Entity Info / Ask / Instructor."""
+    return _props_role(context) == "side"
+
+
+def _draw_strip_items(column, items, *, active=""):
+    """Draw icon-only strip buttons (modeling or BIM)."""
+    for item in items:
         if item is None:
-            column.separator(factor=0.35)
+            column.separator(factor=0.45)
             continue
         idname, _label = item
         is_active = active == idname
+        row = column.row(align=True)
+        row.alignment = "CENTER"
         custom = _tool_icon_value(idname)
         kwargs = {"text": "", "depress": is_active, "emboss": True}
         if custom:
             kwargs["icon_value"] = custom
         else:
             kwargs["icon"] = _tool_icon(idname)
-        column.operator(idname, **kwargs)
+        row.operator(idname, **kwargs)
+
+
+def _draw_tool_strip(layout, context):
+    """O-Draft vertical modelling strip: 32 DIP icon buttons."""
+    active = _active_tool(context)
+    column = layout.column(align=True)
+    column.scale_y = _ICON_SCALE
+    _draw_strip_items(column, design.TOOL_STRIP, active=active)
+
+
+def _draw_bim_strip(layout):
+    """Vertical BIM strip on the right (same 32 DIP targets as modelling)."""
+    column = layout.column(align=True)
+    column.scale_y = _ICON_SCALE
+    _draw_strip_items(column, design.BIM_TOOLBAR, active="")
+
+
+def _draw_bim_toolbar_row(layout, *, icon_only: bool = True):
+    """Horizontal BIM toolbar (Window menu preview)."""
+    row = layout.row(align=True)
+    row.scale_x = 1.05 if icon_only else 1.0
+    for item in design.BIM_TOOLBAR:
+        if item is None:
+            row.separator()
+            continue
+        idname, label = item
+        kwargs = {"text": "" if icon_only else label, "emboss": True}
+        custom = _tool_icon_value(idname)
+        if custom:
+            kwargs["icon_value"] = custom
+        else:
+            kwargs["icon"] = _tool_icon(idname)
+        row.operator(idname, **kwargs)
 
 
 class OFORM_PT_large_tool_set(Panel):
-    """Primary SketchUp-style Large Tool Set rail."""
+    """O-Draft-style vertical modelling tool strip (left)."""
 
     bl_idname = "OFORM_PT_large_tool_set"
     bl_space_type = "PROPERTIES"
@@ -780,11 +1132,35 @@ class OFORM_PT_large_tool_set(Panel):
     bl_order = 0
     bl_options = {"HIDE_HEADER"}
 
+    @classmethod
+    def poll(cls, context):
+        return _poll_tool_strip(context)
+
     def draw(self, context):
-        _draw_large_tool_set(self.layout, context)
+        _draw_tool_strip(self.layout, context)
 
 
-_NAV_PANELS = (OFORM_PT_large_tool_set,)
+class OFORM_PT_bim_toolbar(Panel):
+    """Legacy icon strip — superseded by the right BIM panel."""
+
+    bl_idname = "OFORM_PT_bim_toolbar"
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_context = "scene"
+    bl_label = "BIM Tools"
+    bl_order = 0
+    bl_options = {"HIDE_HEADER", "DEFAULT_CLOSED"}
+
+    @classmethod
+    def poll(cls, context):
+        return False
+
+    def draw(self, context):
+        _ = context
+        _draw_bim_strip(self.layout)
+
+
+_NAV_PANELS = (OFORM_PT_large_tool_set, OFORM_PT_bim_toolbar)
 
 
 class OFORM_PT_properties(Panel):
@@ -792,15 +1168,19 @@ class OFORM_PT_properties(Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
-    bl_label = "Properties"
+    bl_label = "Entity Info"
     bl_order = 40
-    # Open by default so group context stays discoverable (Make Component is on the rail).
+
+    @classmethod
+    def poll(cls, context):
+        return _poll_side_panel(context)
 
     def draw(self, context):
         import groups
+        import solids
 
         layout = self.layout
-        obj = groups.context_object(context)
+        obj = groups.context_object(context, create=False)
         entity = groups.get_entity(context)
         col = layout.column(align=True)
         col.label(text="Context: " + (obj.name if obj else "—"))
@@ -808,14 +1188,34 @@ class OFORM_PT_properties(Panel):
         if entity is not None:
             col.label(text="Entity: " + entity.name)
             col.label(text="Kind: " + groups.kind_of(entity))
+            if entity.type == "MESH":
+                col.label(
+                    text="Solid: yes" if solids.object_is_solid(entity) else "Solid: no"
+                )
         else:
             col.label(text="Entity: (none)")
+            if obj is not None and obj.type == "MESH" and obj.mode == "EDIT":
+                import bmesh
+
+                bm = bmesh.from_edit_mesh(obj.data)
+                faces = [f for f in bm.faces if f.select]
+                edges = [e for e in bm.edges if e.select]
+                verts = [v for v in bm.verts if v.select]
+                col.label(text="Faces {} · Edges {} · Verts {}".format(
+                    len(faces), len(edges), len(verts)
+                ))
+                if len(faces) == 1:
+                    area = faces[0].calc_area()
+                    col.label(text="Area: {:.4f}".format(area))
+                if len(edges) == 1:
+                    col.label(text="Length: {:.4f}".format(edges[0].calc_length()))
         layout.separator()
         layout.operator("oform.make_group", text="Make Group", icon="GROUP")
         layout.operator("oform.explode", text="Explode")
         row = layout.row(align=True)
         row.operator("oform.enter_group", text="Edit")
         row.operator("oform.exit_group", text="Close")
+        layout.operator("oform.hide_rest", text="Hide Rest of Model")
         dark = brand.is_dark(context)
         layout.separator()
         layout.operator(
@@ -831,7 +1231,96 @@ class OFORM_PT_properties(Panel):
         layout.operator(
             "oform.boolean_intersect", text="Intersect", icon=_tool_icon("oform.boolean_intersect")
         )
+        layout.operator("oform.boolean_trim", text="Trim")
         layout.operator("oform.solid_inspect", text="Inspect", icon=_tool_icon("oform.solid_inspect"))
+
+
+class OFORM_PT_instructor(Panel):
+    """SketchUp Instructor-style tip for the active tool (status-bar companion)."""
+
+    bl_idname = "OFORM_PT_instructor"
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_context = "scene"
+    bl_label = "Instructor"
+    bl_order = 45
+    bl_options = {"DEFAULT_CLOSED"}
+
+    @classmethod
+    def poll(cls, context):
+        return _poll_side_panel(context)
+
+    _TIPS = {
+        "oform.tool_select": (
+            "Click = entity · Double = related · Triple = connected",
+            "Alt+1/2/3 · Shift extends · drag for window select",
+        ),
+        "oform.tool_line": (
+            "Click endpoints. Type length + Enter (VCB).",
+            "Arrows lock axes · Shift locks inference · Esc cancels",
+        ),
+        "oform.tool_move": (
+            "Base point → destination. Ctrl toggles copy.",
+            "After a copy: type 5x (external) or 3/ (internal) + Enter",
+        ),
+        "oform.tool_rotate": (
+            "Center → reference → destination. Ctrl copies.",
+            "After a copy: 8x or 6/ for circular arrays",
+        ),
+        "oform.tool_push_pull": (
+            "Click face, move or type distance. Ctrl copies face.",
+            "Double-click another face to repeat the last distance",
+        ),
+        "oform.tool_rectangle": (
+            "Two corners on the working plane.",
+            "Type width,depth (e.g. 4,6) then Enter",
+        ),
+        "oform.tool_circle": (
+            "Center then radius. Type 24s for segments first.",
+            "Shift locks inference · arrows lock axes",
+        ),
+        "oform.tool_tape": (
+            "Measure between points. Ctrl+second click = guide.",
+            "Edit → Delete Guides clears all guides",
+        ),
+        "oform.tool_eraser": (
+            "Click or drag over edges/faces to erase.",
+            "Ctrl softens · Shift hides edges",
+        ),
+    }
+
+    def draw(self, context):
+        layout = self.layout
+        active = _active_tool(context)
+        label = dict(_TOOLS).get(active, "Select")
+        layout.label(text=label, icon=_tool_icon(active))
+        tips = self._TIPS.get(active)
+        if tips:
+            for line in tips:
+                row = layout.row()
+                row.enabled = False
+                row.label(text=line)
+        else:
+            custom = None
+            try:
+                import tools as tools_mod
+
+                custom = tools_mod._TOOL_DESCRIPTIONS.get(active)
+            except Exception:
+                pass
+            row = layout.row()
+            row.enabled = False
+            row.label(text=custom or "See Help for shortcuts")
+        layout.separator()
+        layout.label(text="Power tips")
+        for line in (
+            "VCB always accepts typed values — no click needed",
+            "Groups isolate geometry; components stay linked",
+            "Hide Rest (Ctrl+Shift+H) while editing a group",
+        ):
+            row = layout.row()
+            row.enabled = False
+            row.label(text=line)
 
 
 class OFORM_PT_ask(Panel):
@@ -841,6 +1330,10 @@ class OFORM_PT_ask(Panel):
     bl_context = "scene"
     bl_label = "Ask"
     bl_order = 50
+
+    @classmethod
+    def poll(cls, context):
+        return _poll_side_panel(context)
 
     def draw(self, context):
         layout = self.layout
@@ -869,6 +1362,90 @@ class OFORM_PT_ask(Panel):
                 line.label(text=(prefix + text)[:64])
 
 
+class OFORM_PT_bim(Panel):
+    """BIM spatial structure + element typing — right panel."""
+
+    bl_idname = "OFORM_PT_bim"
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_context = "scene"
+    bl_label = "BIM"
+    bl_order = 0
+    bl_options = {"HIDE_HEADER"}
+
+    @classmethod
+    def poll(cls, context):
+        return _poll_bim_panel(context)
+
+    def draw(self, context):
+        from bim import props as bim_props
+        from bim import quantities
+        from bim import spatial
+        from bim import taxonomy
+
+        layout = self.layout
+        scene = context.scene
+        tree = spatial.project_snapshot(scene)
+        if not tree["initialized"]:
+            layout.operator("oform.bim_ensure_project", text="Initialize BIM Project")
+            layout.separator()
+        col = layout.column(align=True)
+        col.label(text=tree["project"])
+        muted = col.row()
+        muted.enabled = False
+        muted.label(text="{} · {}".format(tree["site"], tree["building"]))
+        layout.separator()
+        layout.label(text="Storey: " + tree["active_storey"])
+        for storey in tree["storeys"][:8]:
+            op = layout.operator(
+                "oform.bim_set_storey",
+                text="{} ({:.1f} m)".format(storey["name"], storey["elevation"]),
+                depress=storey["name"] == tree["active_storey"],
+            )
+            op.storey = storey["name"]
+        layout.operator("oform.bim_add_storey", text="Add Storey…")
+        layout.separator()
+        layout.menu("OFORM_MT_bim_ifc_map", text="Map to IFC Component")
+        layout.operator("oform.bim_classify", text="Auto-Classify")
+        layout.operator("oform.bim_set_class", text="Set IFC Class…")
+        layout.operator("oform.bim_assign_storey", text="Assign to Storey")
+        tip = layout.row()
+        tip.enabled = False
+        tip.label(text="Right-click view · BIM menu")
+        obj = context.view_layer.objects.active
+        if obj is not None and obj.type == "MESH":
+            layout.separator()
+            ifc_class = bim_props.ifc_class_of(obj) or "(untyped)"
+            layout.label(text=obj.name)
+            layout.label(text="IFC: " + taxonomy.label_of(ifc_class))
+            storey = bim_props.storey_of(obj) or "—"
+            layout.label(text="Storey: " + storey)
+            stats = quantities.mesh_stats(obj)
+            layout.label(
+                text="V {:.3f} · A {:.3f}".format(stats["volume"], stats["area"])
+            )
+        layout.separator()
+        layout.operator("oform.bim_export_ifc", text="Export IFC…")
+        layout.operator("oform.bim_import_ifc", text="Import IFC…")
+        layout.separator()
+        layout.label(text="Suite take-off (O-Draft / O-CoreOp)")
+        layout.operator("oform.open_project", text="Open Project Folder…")
+        layout.operator("oform.bim_shilpi_connect", text="Connect ShilpiDB")
+        layout.operator("oform.bim_suite_push", text="Push BIM + Take-off")
+        layout.operator("oform.bim_takeoff_status", text="Take-off Status")
+        layout.operator("oform.live_sync_toggle", text="Toggle Live Sync")
+        layout.operator("oform.bim_suite_list", text="List Drawings")
+        layout.operator("oform.bim_set_office_id", text="AORMS Id…")
+        tip = layout.row()
+        tip.enabled = False
+        root = str(scene.get("oform_project_root", "") or "")
+        did = str(scene.get("oform_drawing_id", "") or "")
+        if root:
+            tip.label(text="project · drawing " + (did[:8] if did else "?"))
+        else:
+            tip.label(text=("drawing " + did[:8]) if did else "open project or push to mint id")
+
+
 class OFORM_OT_toggle_theme(Operator):
     bl_idname = "oform.toggle_theme"
     bl_label = "Toggle Theme"
@@ -895,11 +1472,24 @@ class OFORM_OT_toggle_theme(Operator):
             brand.apply_theme(context, dark=dark)
         except Exception:
             traceback.print_exc()
+            self.report({"ERROR"}, "Theme switch failed")
             return {"CANCELLED"}
         _style_view(context)
-        for area in context.screen.areas:
-            area.tag_redraw()
-        context.scene.oform_status = "Dark theme" if dark else "Light theme"
+        # Force every window/area to pick up preference theme colours.
+        wm = context.window_manager
+        screens = []
+        if wm is not None:
+            for window in wm.windows:
+                if window.screen is not None:
+                    screens.append(window.screen)
+        if context.screen is not None and context.screen not in screens:
+            screens.append(context.screen)
+        for screen in screens:
+            for area in screen.areas:
+                area.tag_redraw()
+        if hasattr(context.scene, "oform_status"):
+            context.scene.oform_status = "Dark theme" if dark else "Light theme"
+        self.report({"INFO"}, "Dark theme" if dark else "Light theme")
         return {"FINISHED"}
 
 
@@ -924,8 +1514,8 @@ class OFORM_OT_preferences_hint(Operator):
             text="Use Light Theme" if dark else "Use Dark Theme",
         ).mode = "LIGHT" if dark else "DARK"
         layout.separator()
-        layout.label(text="Tools and Ask live in the left pane.")
-        layout.label(text="Measurements (VCB) appear in the status bar.")
+        layout.label(text="Tools: left strip (32 DIP). Panels: 280 DIP.")
+        layout.label(text="Ask: side panel + bottom bar. VCB in status.")
         layout.label(text="Shortcuts: Help menu.")
 
     def execute(self, context):
@@ -975,7 +1565,11 @@ class OFORM_OT_ask_decline(Operator):
 
 
 def _draw_ask_overlay():
-    """On-canvas hints only — never a fake text field (Ask lives in the left pane)."""
+    """O-Draft command chrome: bottom-centre Ask bar (2 px top accent) or CAD/VCB.
+
+    Ask text entry lives in the left side panel; this overlay mirrors the WinUI
+    fixed AI strip (COMMAND_BAR.md) for confirm / VCB / idle cue.
+    """
     try:
         import blf
         import gpu
@@ -996,22 +1590,27 @@ def _draw_ask_overlay():
     _name, pending_label = ai.pending(scene)
     measure = (getattr(scene, "oform_measure", "") or "").strip()
 
-    # Honest chrome: confirmation pointer, or VCB while measuring — not a faux input.
+    # Channel: AI (top accent) vs CAD/VCB (left CadChannelBrush edge).
+    cad_mode = bool(measure) and not (phase == "confirm" and pending_label)
     if phase == "confirm" and pending_label:
-        label = "Confirm in Ask (left pane): " + pending_label
-        accent_rgb = colors["ai"]
+        label = "Ask:  " + pending_label + "  — Allow / Decline in side panel"
+        top_accent = True
     elif measure:
         label = "VCB  " + measure
-        accent_rgb = colors.get("select", colors["ai"])
+        top_accent = False
     else:
-        return
+        label = ai.CHANNEL_LABEL + "  type in the side panel  ·  /… from VCB"
+        top_accent = True
 
-    width = min(520, max(240, region.width - 48))
-    height = 28
+    width = min(design.ASK_BAR_MAX_DIP, max(280, region.width - 48))
+    height = design.ASK_BAR_HEIGHT
     x = (region.width - width) * 0.5
-    y = 14
+    y = 16
     shader = gpu.shader.from_builtin("UNIFORM_COLOR")
-    fill = (*[c / 255.0 for c in (colors["surface"] if not dark else (31, 31, 31))], 0.92)
+    # Opaque command chrome (no acrylic) — ColorTokens CommandChromeBrush.
+    fill_rgb = colors["surface"] if not dark else (31, 31, 31)
+    fill = (*[c / 255.0 for c in fill_rgb], 0.95)
+    accent_rgb = colors["cad"] if cad_mode else colors["ai"]
     accent = (*[c / 255.0 for c in accent_rgb], 1.0)
     verts = (
         (x, y), (x + width, y), (x + width, y + height), (x, y + height),
@@ -1021,12 +1620,22 @@ def _draw_ask_overlay():
     shader.bind()
     shader.uniform_float("color", fill)
     batch.draw(shader)
-    accent_verts = (
-        (x, y),
-        (x + 4, y),
-        (x + 4, y + height),
-        (x, y + height),
-    )
+    if top_accent:
+        # 2 px top accent — O-Draft AI channel.
+        accent_verts = (
+            (x, y + height - 2),
+            (x + width, y + height - 2),
+            (x + width, y + height),
+            (x, y + height),
+        )
+    else:
+        # 2 px left CadChannelBrush — O-Draft CAD channel.
+        accent_verts = (
+            (x, y),
+            (x + 2, y),
+            (x + 2, y + height),
+            (x, y + height),
+        )
     shader.uniform_float("color", accent)
     batch_for_shader(shader, "TRI_FAN", {"pos": accent_verts}).draw(shader)
     gpu.state.blend_set("NONE")
@@ -1034,8 +1643,8 @@ def _draw_ask_overlay():
     font_id = 0
     blf.size(font_id, 12)
     blf.color(font_id, *[c / 255.0 for c in colors["ink"]], 1.0)
-    blf.position(font_id, x + 14, y + 8, 0)
-    blf.draw(font_id, label[:70])
+    blf.position(font_id, x + 14, y + (height - 12) * 0.5, 0)
+    blf.draw(font_id, label[:72])
 
 
 def _ensure_ask_overlay():
@@ -1062,9 +1671,10 @@ def _remove_ask_overlay():
             pass
 
 
-_SIDE_PANELS = (OFORM_PT_properties, OFORM_PT_ask)
+_SIDE_PANELS = (OFORM_PT_bim, OFORM_PT_properties, OFORM_PT_instructor, OFORM_PT_ask)
 _SHELL_OPS = (
     OFORM_OT_toggle_theme,
+    OFORM_OT_set_units,
     OFORM_OT_preferences_hint,
     OFORM_OT_ask_submit,
     OFORM_OT_ask_allow,
@@ -1332,10 +1942,9 @@ def _startup_scene():
         bpy.ops.object.mode_set(mode="EDIT")
     context.tool_settings.mesh_select_mode = (True, True, True)
 
-    units = scene.unit_settings
-    units.system = "METRIC"
-    units.length_unit = "METERS"
-    units.scale_length = 1.0
+    import units as units_mod
+
+    units_mod.set_unit(scene, scene.get(units_mod.PROP_LENGTH_UNIT, "m") or "m")
 
     inputs = context.preferences.inputs
     if hasattr(inputs, "view_rotate_method"):
@@ -1343,6 +1952,12 @@ def _startup_scene():
             inputs.view_rotate_method = "TURNTABLE"
         except (TypeError, ValueError):
             pass
+
+    # Keep the O-Draft-style bottom command bar (units · VCB) visible.
+    try:
+        context.screen.show_statusbar = True
+    except Exception:
+        pass
 
     # Default to light paper (SketchUp); dark is one click in the status bar.
     if "oform_dark" not in scene:
@@ -1353,7 +1968,15 @@ def _startup_scene():
         traceback.print_exc()
     if not bpy.app.background:
         _close_extra_areas(context)
-        bpy.app.timers.register(_open_nav, first_interval=0.05)
+        if design.shell_enabled():
+            import shell_v2
+
+            bpy.app.timers.register(shell_v2.open_workspace, first_interval=0.05)
+            bpy.app.timers.register(shell_v2.open_workspace, first_interval=0.4)
+        else:
+            bpy.app.timers.register(_open_nav, first_interval=0.05)
+            # Second pass after the window has a real pixel size (avoids a full-width rail).
+            bpy.app.timers.register(_open_nav, first_interval=0.35)
     _style_view(context)
     if hasattr(scene, "oform_tool"):
         scene.oform_tool = "oform.tool_select"
@@ -1370,51 +1993,238 @@ def _startup_scene():
         bpy.app.timers.register(_ensure_ask_overlay, first_interval=0.3)
 
 
-def _ensure_tools_on_left(screen):
-    """Keep the Properties tool rail on the left of the 3D view (O-Draft shell)."""
-    pair = [area for area in screen.areas if area.type in {"VIEW_3D", "PROPERTIES"}]
-    if len(pair) < 2:
-        return
-    left, right = sorted(pair, key=lambda area: (area.x, area.width))[:2]
-    if left.type == "PROPERTIES":
-        return
-    # Swap editor types so the left strip hosts Tools / Properties / Ask.
-    if right.type == "PROPERTIES":
-        right.type = "VIEW_3D"
+def _shell_layout(screen):
+    """Return (tools, side, view3d, bim) for modelling-left / BIM-right shell."""
+    props = sorted(
+        [a for a in screen.areas if a.type == "PROPERTIES"],
+        key=lambda a: a.x,
+    )
+    views = [a for a in screen.areas if a.type == "VIEW_3D"]
+    view = max(views, key=lambda a: a.width) if views else None
+    tools = props[0] if props else None
+    side = props[1] if len(props) > 1 else None
+    bim = props[-1] if len(props) >= 3 else None
+    if tools is not None and side is not None and tools.width > side.width:
+        tools, side = side, tools
+    if bim is not None and side is not None and bim.as_pointer() == side.as_pointer():
+        bim = None
+    return tools, side, view, bim
+
+
+def _shell_trio(screen):
+    """Compat: (tool_strip, side_panel, view3d) — ignores BIM rail."""
+    tools, side, view, _bim = _shell_layout(screen)
+    return tools, side, view
+
+
+def _close_area(context, window, screen, area):
+    try:
+        region = next((r for r in area.regions if r.type == "WINDOW"), None)
+        ov = {"window": window, "screen": screen, "area": area}
+        if region is not None:
+            ov["region"] = region
+        with context.temp_override(**ov):
+            bpy.ops.screen.area_close()
+        return True
+    except (RuntimeError, TypeError, AttributeError):
+        return False
+
+
+def _collapse_to_single_view3d(context, screen, window):
+    """One VIEW_3D only — drop PROPERTIES / duplicate 3D panes."""
+    for _ in range(16):
+        props = [a for a in screen.areas if a.type == "PROPERTIES"]
+        if not props:
+            break
+        if not _close_area(context, window, screen, props[0]):
+            props[0].type = "VIEW_3D"
+            break
+    for _ in range(12):
+        views = [a for a in screen.areas if a.type == "VIEW_3D"]
+        if len(views) <= 1:
+            break
+        extra = sorted(views, key=lambda a: (a.width, -a.x))[0]
+        if not _close_area(context, window, screen, extra):
+            break
+    return any(a.type == "VIEW_3D" for a in screen.areas)
+
+
+def _swap_adjacent_areas(context, window, screen, a, b):
+    cursor = (
+        int((a.x + a.width + b.x) * 0.5),
+        int((min(a.y + a.height, b.y + b.height) + max(a.y, b.y)) * 0.5),
+    )
+    try:
+        with context.temp_override(window=window, screen=screen, area=a):
+            result = bpy.ops.screen.area_swap(cursor=cursor)
+        return "FINISHED" in result
+    except (RuntimeError, TypeError, AttributeError):
+        return False
+
+
+def _split_vertical(context, window, screen, area, factor):
+    region = next((r for r in area.regions if r.type == "WINDOW"), None)
+    ov = {"window": window, "screen": screen, "area": area}
+    if region is not None:
+        ov["region"] = region
+    before = {a.as_pointer() for a in screen.areas}
+    with context.temp_override(**ov):
+        result = bpy.ops.screen.area_split(direction="VERTICAL", factor=factor)
+    if "FINISHED" not in result:
+        return None
+    created = [a for a in screen.areas if a.as_pointer() not in before]
+    return created[0] if created else None
+
+
+def _split_odraft_shell(context, screen, window):
+    """O-Draft: [32 DIP tools | 280 DIP panel | canvas | BIM panel]."""
+    if not _collapse_to_single_view3d(context, screen, window):
+        return False
+    view = next((a for a in screen.areas if a.type == "VIEW_3D"), None)
+    if view is None:
+        return False
+    win_w = max(int(getattr(window, "width", 0) or 1600), 800)
+    stack_ratio = design.left_stack_ratio(win_w)
+    # Peel left stack off the canvas.
+    created = _split_vertical(context, window, screen, view, stack_ratio)
+    if created is None:
+        return False
+    editors = [a for a in screen.areas if a.type == "VIEW_3D"]
+    if len(editors) < 2:
+        return False
+    left, right = sorted(editors, key=lambda a: a.x)
+    # Ensure left is the narrower stack.
+    if left.width > right.width:
+        _swap_adjacent_areas(context, window, screen, left, right)
+        editors = [a for a in screen.areas if a.type == "VIEW_3D"]
+        left, right = sorted(editors, key=lambda a: a.x)
     left.type = "PROPERTIES"
+    right.type = "VIEW_3D"
+    # Split left stack into tool strip | side panel.
+    strip_factor = design.tool_strip_of_stack()
+    created2 = _split_vertical(context, window, screen, left, strip_factor)
+    if created2 is None:
+        return False
+    props = [a for a in screen.areas if a.type == "PROPERTIES"]
+    if len(props) < 2:
+        views = sorted(
+            [a for a in screen.areas if a.type == "VIEW_3D"],
+            key=lambda a: a.x,
+        )
+        canvas = max(views, key=lambda a: a.width)
+        for a in views:
+            if a is not canvas:
+                a.type = "PROPERTIES"
+        props = [a for a in screen.areas if a.type == "PROPERTIES"]
+    if len(props) < 2:
+        return False
+    strip, panel = sorted(props, key=lambda a: a.x)
+    if strip.width > panel.width:
+        _swap_adjacent_areas(context, window, screen, strip, panel)
+        props = sorted(
+            [a for a in screen.areas if a.type == "PROPERTIES"],
+            key=lambda a: a.x,
+        )
+        if len(props) >= 2:
+            strip, panel = props[0], props[1]
+    views = [a for a in screen.areas if a.type == "VIEW_3D"]
+    canvas = max(views, key=lambda a: a.width) if views else None
+    if canvas is None:
+        return False
+
+    # Peel right BIM panel from the canvas (~280 DIP).
+    bim_keep = max(0.72, min(0.88, 1.0 - design.RIGHT_BIM_RATIO))
+    if _split_vertical(context, window, screen, canvas, bim_keep) is None:
+        return False
+    views = sorted(
+        [a for a in screen.areas if a.type == "VIEW_3D"],
+        key=lambda a: a.x,
+    )
+    if len(views) < 2:
+        return False
+    # Keep the widest as canvas; convert the other (right pane) to PROPERTIES.
+    canvas = max(views, key=lambda a: a.width)
+    for a in views:
+        if a.as_pointer() != canvas.as_pointer():
+            a.type = "PROPERTIES"
+    props = sorted(
+        [a for a in screen.areas if a.type == "PROPERTIES"],
+        key=lambda a: a.x,
+    )
+    views = [a for a in screen.areas if a.type == "VIEW_3D"]
+    canvas = max(views, key=lambda a: a.width) if views else None
+    if canvas is None or len(props) < 3:
+        return False
+    bim = props[-1]
+    if bim.x < canvas.x:
+        _swap_adjacent_areas(context, window, screen, bim, canvas)
+        props = sorted(
+            [a for a in screen.areas if a.type == "PROPERTIES"],
+            key=lambda a: a.x,
+        )
+        views = [a for a in screen.areas if a.type == "VIEW_3D"]
+        canvas = max(views, key=lambda a: a.width) if views else None
+        bim = props[-1] if props else None
+    if canvas is None or bim is None:
+        return False
+
+    strip, panel = props[0], props[1]
+    keep = {
+        strip.as_pointer(),
+        panel.as_pointer(),
+        canvas.as_pointer(),
+        bim.as_pointer(),
+    }
+    for extra in list(screen.areas):
+        if extra.type in {"VIEW_3D", "PROPERTIES"} and extra.as_pointer() not in keep:
+            _close_area(context, window, screen, extra)
+    tools, side, view, bim_rail = _shell_layout(screen)
+    return (
+        tools is not None
+        and side is not None
+        and view is not None
+        and bim_rail is not None
+        and tools.x < side.x < view.x < bim_rail.x
+        and tools.width < side.width
+        and bim_rail.width >= design.SIDE_PANEL_MIN_W
+        and bim_rail.width < view.width
+    )
+
+
+def _shell_needs_rebuild(screen, window):
+    tools, side, view, bim = _shell_layout(screen)
+    views = [a for a in screen.areas if a.type == "VIEW_3D"]
+    props = [a for a in screen.areas if a.type == "PROPERTIES"]
+    if len(views) != 1 or len(props) != 3:
+        return True
+    if tools is None or side is None or view is None or bim is None:
+        return True
+    if not (tools.x < side.x < view.x < bim.x):
+        return True
+    if tools.width > design.TOOL_STRIP_MAX_W * 1.5:
+        return True
+    if bim.width < design.SIDE_PANEL_MIN_W:
+        return True
+    if side.width < design.SIDE_PANEL_MIN_W:
+        return True
+    total = tools.width + side.width + view.width + bim.width
+    if total > 0 and (tools.width + side.width) / float(total) > _SIDE_MAX_RATIO:
+        return True
+    return False
 
 
 def _open_nav():
-    """Split a left pane off the view, the same place the suite keeps its sections."""
+    """Shell: left modelling + side panel + canvas + right BIM panel."""
     try:
         context = bpy.context
         window = context.window
         if window is None:
             return 0.2
         screen = window.screen
-        if any(area.type == "PROPERTIES" for area in screen.areas):
-            _ensure_tools_on_left(screen)
-            _use_scene_context(screen)
-            _style_view(context)
-            return None
-        view = next((area for area in screen.areas if area.type == "VIEW_3D"), None)
-        if view is None:
-            return None
-        region = next((item for item in view.regions if item.type == "WINDOW"), None)
-        override = {"window": window, "screen": screen, "area": view}
-        if region is not None:
-            override["region"] = region
-        before = {area.as_pointer() for area in screen.areas}
-        with context.temp_override(**override):
-            result = bpy.ops.screen.area_split(direction="VERTICAL", factor=_SIDE_WIDTH)
-        if "FINISHED" not in result:
-            return None
-        # New area is the one that did not exist before; pin tools to the left edge.
-        created = [area for area in screen.areas if area.as_pointer() not in before]
-        if not created:
-            return None
-        created[0].type = "PROPERTIES"
-        _ensure_tools_on_left(screen)
+        if _shell_needs_rebuild(screen, window):
+            if not _split_odraft_shell(context, screen, window):
+                _collapse_to_single_view3d(context, screen, window)
+                _split_odraft_shell(context, screen, window)
         _use_scene_context(screen)
         _style_view(context)
         _remove_unused_ui()
@@ -1491,16 +2301,28 @@ def register():
     from bl_ui.space_view3d import VIEW3D_HT_header
 
     _remove_unused_ui()
-    for cls in list(_NAV_PANELS) + list(_SIDE_PANELS):
-        if not getattr(cls, "is_registered", False):
-            bpy.utils.register_class(cls)
-    _swap(TOPBAR_MT_editor_menus, "draw", _draw_menus)
-    _swap(TOPBAR_HT_upper_bar, "draw", _draw_topbar)
-    _swap(PROPERTIES_HT_header, "draw", _draw_properties_header)
-    _swap(WM_MT_splash, "draw", _draw_splash)
-    _swap(WM_MT_splash_about, "draw", _draw_about)
-    _swap(VIEW3D_HT_header, "draw", _draw_view3d_header)
-    _swap(STATUSBAR_HT_header, "draw", _draw_status)
+    if design.shell_enabled():
+        import shell_v2
+
+        shell_v2.register()
+        _swap(TOPBAR_MT_editor_menus, "draw", _draw_menus)
+        _swap(TOPBAR_HT_upper_bar, "draw", shell_v2.draw_topbar)
+        _swap(PROPERTIES_HT_header, "draw", shell_v2.draw_properties_header)
+        _swap(WM_MT_splash, "draw", _draw_splash)
+        _swap(WM_MT_splash_about, "draw", _draw_about)
+        _swap(VIEW3D_HT_header, "draw", shell_v2.draw_view3d_header)
+        _swap(STATUSBAR_HT_header, "draw", shell_v2.draw_status)
+    else:
+        for cls in list(_NAV_PANELS) + list(_SIDE_PANELS):
+            if not getattr(cls, "is_registered", False):
+                bpy.utils.register_class(cls)
+        _swap(TOPBAR_MT_editor_menus, "draw", _draw_menus)
+        _swap(TOPBAR_HT_upper_bar, "draw", _draw_topbar)
+        _swap(PROPERTIES_HT_header, "draw", _draw_properties_header)
+        _swap(WM_MT_splash, "draw", _draw_splash)
+        _swap(WM_MT_splash_about, "draw", _draw_about)
+        _swap(VIEW3D_HT_header, "draw", _draw_view3d_header)
+        _swap(STATUSBAR_HT_header, "draw", _draw_status)
     if _load_post not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_load_post)
     if _load_factory not in bpy.app.handlers.load_factory_startup_post:
@@ -1524,6 +2346,10 @@ def unregister():
     while _DRAW:
         cls, name, original = _DRAW.pop()
         setattr(cls, name, original)
+    if design.shell_enabled():
+        import shell_v2
+
+        shell_v2.unregister()
     for cls in reversed(list(_SIDE_PANELS) + list(_NAV_PANELS)):
         if getattr(cls, "is_registered", False):
             bpy.utils.unregister_class(cls)

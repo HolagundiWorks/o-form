@@ -1,0 +1,176 @@
+{
+  "source": "https://raw.githubusercontent.com/IfcOpenShell/IfcOpenShell/v0.8.0/src/ifcopenshell-python/test/files/basic.ifc",
+  "ifc_file": "D:\\o-form\\tests\\fixtures\\sample_wall.ifc",
+  "ifc_import": "Imported 0 products from sample_wall.ifc | built OnlineSampleWall from IfcOpenShell basic.ifc source (extruded IFC \u2192 tessellation fallback)",
+  "drawing_id": "d6b23d00-c424-4105-b3ed-b4a079b26a47",
+  "project_office_id": "osas-test-office-odraft-oform",
+  "push_ok": true,
+  "push_msg": "ShilpiDB push: 1 elements (slot 16653062, deleted 0)",
+  "shilpi_status": {
+    "addr": "127.0.0.1:7420",
+    "gateway": "127.0.0.1:7421",
+    "connected": true,
+    "drawing_id": "d6b23d00-c424-4105-b3ed-b4a079b26a47",
+    "project_office_id": "osas-test-office-odraft-oform",
+    "stats": {
+      "count": 15,
+      "cellSize": 730296.7433402215
+    }
+  },
+  "product_count": 1,
+  "products": [
+    {
+      "name": "OnlineSampleWall",
+      "ifc": "IfcWall",
+      "guid": "e3bpLFWOIqAdCjAfCjhcF0"
+    }
+  ],
+  "oform_headers": [
+    {
+      "id": 1487589350630752256,
+      "kind": 20,
+      "slot": 10812066,
+      "doc": {
+        "format": "oform-ifc-shilpi",
+        "version": 1,
+        "kind": "header",
+        "state": "complete",
+        "units": "m",
+        "source": {
+          "app": "O-Form",
+          "drawing_id": "e05905c1-2fc3-48f0-9a51-6992b2889538",
+          "building": "Building",
+          "site": "Site",
+          "project": "O-Form Project"
+        },
+        "storeys": [
+          {
+            "name": "Level 0",
+            "elevation": 0.0,
+            "guid": "ZSH5iLjMJOA$$UVPCgzpXW"
+          },
+          {
+            "name": "Level 1",
+            "elevation": 3.0,
+            "guid": "zHJLIhmmHcgCFRjZS$mufG"
+          }
+        ],
+        "active_storey": "Level 0",
+        "counts": {
+          "elements": 8
+        }
+      },
+      "bbox": {
+        "minX": -1000000,
+        "minY": -1000000,
+        "maxX": 1000000,
+        "maxY": 1000000
+      }
+    },
+    {
+      "id": 1512676237426819072,
+      "kind": 20,
+      "slot": 16653062,
+      "doc": {
+        "format": "oform-ifc-shilpi",
+        "version": 1,
+        "kind": "header",
+        "state": "complete",
+        "units": "m",
+        "source": {
+          "app": "O-Form",
+          "drawing_id": "d6b23d00-c424-4105-b3ed-b4a079b26a47",
+          "building": "Building",
+          "site": "Site",
+          "project": "O-Form Project",
+          "project_office_id": "osas-test-office-odraft-oform"
+        },
+        "storeys": [
+          {
+            "name": "Level 0",
+            "elevation": 0.0,
+            "guid": "xhquT4miIgwXgnyFeoj_p0"
+          },
+          {
+            "name": "Level 1",
+            "elevation": 3.0,
+            "guid": "l1gARGvmJpA6s8zH1BU6WW"
+          }
+        ],
+        "active_storey": "Level 0",
+        "counts": {
+          "elements": 1
+        }
+      },
+      "bbox": {
+        "minX": -1000000,
+        "minY": -1000000,
+        "maxX": 1000000,
+        "maxY": 1000000
+      }
+    }
+  ],
+  "oform_elements": [
+    {
+      "id": 1559646945821048393,
+      "ifc_class": "IfcBuildingElementProxy",
+      "name": "Cube.001",
+      "bbox": {
+        "minX": 0,
+        "minY": -1,
+        "maxX": 2,
+        "maxY": 1
+      },
+      "office": null
+    },
+    {
+      "id": 1559646946356605601,
+      "ifc_class": "IfcWall",
+      "name": "Cube.002",
+      "bbox": {
+        "minX": -4,
+        "minY": -0.20000000298023224,
+        "maxX": 4,
+        "maxY": 0.20000000298023224
+      },
+      "office": null
+    },
+    {
+      "id": 1559646946824490827,
+      "ifc_class": "IfcBuildingElementProxy",
+      "name": "Cube",
+      "bbox": {
+        "minX": -1,
+        "minY": -1,
+        "maxX": 2,
+        "maxY": 1
+      },
+      "office": null
+    },
+    {
+      "id": 1559646947924684139,
+      "ifc_class": "IfcSlab",
+      "name": "Model.001",
+      "bbox": {
+        "minX": -0.8660249710083008,
+        "minY": -1,
+        "maxX": 4,
+        "maxY": 3
+      },
+      "office": null
+    },
+    {
+      "id": 1584733835413355500,
+      "ifc_class": "IfcWall",
+      "name": "OnlineSampleWall",
+      "bbox": {
+        "minX": 0,
+        "minY": 0,
+        "maxX": 5,
+        "maxY": 0.20000000298023224
+      },
+      "office": "osas-test-office-odraft-oform"
+    }
+  ],
+  "total_server_records": 15
+}

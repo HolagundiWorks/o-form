@@ -178,6 +178,25 @@ def _run(obj):
     if not heights or any(abs(height) > 1e-3 for height in heights):
         _fail("undo did not restore z=0: " + str(heights))
 
+    # Lone rectangle → Push/Pull must produce a closed solid (bottom + sides + top).
+    import solids as solids_mod
+
+    result = bpy.ops.oform.rectangle(
+        True,
+        corner_a=(10.0, 10.0, 0.0),
+        corner_b=(12.0, 11.0, 0.0),
+        normal=(0.0, 0.0, 1.0),
+    )
+    if "FINISHED" not in result:
+        _fail("solid rectangle returned " + str(set(result)))
+    result = bpy.ops.oform.push_pull(True, distance=2.0, face_index=-1)
+    if "FINISHED" not in result:
+        _fail("solid push_pull returned " + str(set(result)))
+    bpy.ops.object.mode_set(mode="OBJECT")
+    if not solids_mod.object_is_solid(obj):
+        _fail("push/pull of a lone face did not create a closed solid")
+    bpy.ops.object.mode_set(mode="EDIT")
+
     # SketchUp-style polygon action (regular hex).
     result = bpy.ops.oform.polygon(
         True,
@@ -249,6 +268,28 @@ def _run(obj):
     if phase != "idle":
         _fail("ask summary should be idle, got " + phase)
 
+    # Multi-unit VCB parsing (' feet, " inches, mm, m).
+    import units as units_mod
+
+    cases = (
+        ("10'", 10 * 0.3048),
+        ('6"', 6 * 0.0254),
+        ("5'6\"", 5 * 0.3048 + 6 * 0.0254),
+        ("100mm", 0.1),
+        ("2.5m", 2.5),
+        ("30cm", 0.3),
+    )
+    for text, expected in cases:
+        got = units_mod.parse_length(text, default_unit="m")
+        if abs(got - expected) > 1e-9:
+            _fail("units parse {} → {:.6f}, expected {:.6f}".format(text, got, expected))
+    units_mod.set_unit(bpy.context.scene, "mm")
+    if abs(units_mod.parse_length("150", default_unit=units_mod.current_unit(bpy.context.scene)) - 0.15) > 1e-9:
+        _fail("bare number should use model unit (mm)")
+    units_mod.set_unit(bpy.context.scene, "m")
+    if not hasattr(bpy.ops.oform, "set_units"):
+        _fail("oform.set_units was not registered")
+
     # Working plane + selection + solids foundation.
     import inference
     import selection
@@ -286,6 +327,76 @@ def _run(obj):
         _fail("oform.boolean_union was not registered")
 
 
+def _run_bim():
+    """BIM engine: classify + IFC4 export/import round-trip."""
+    import os
+    import tempfile
+
+    import bpy
+
+    from bim import ifc4
+    from bim import props as bim_props
+    from bim import spatial
+
+    spatial.ensure_project(bpy.context.scene)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.mesh.primitive_cube_add(size=2.0, location=(0.0, 0.0, 1.0))
+    wall = bpy.context.view_layer.objects.active
+    wall.scale = (4.0, 0.2, 2.5)
+    bpy.context.view_layer.update()
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    wall.select_set(True)
+    bpy.context.view_layer.objects.active = wall
+    result = bpy.ops.oform.bim_classify()
+    if "FINISHED" not in result:
+        _fail("bim_classify returned " + str(set(result)))
+    ifc_class = bim_props.ifc_class_of(wall)
+    if ifc_class not in {"IfcWall", "IfcBuildingElementProxy", "IfcSlab", "IfcColumn", "IfcBeam"}:
+        _fail("unexpected IFC class after classify: " + repr(ifc_class))
+    path = os.path.join(tempfile.gettempdir(), "oform_bim_selftest.ifc")
+    ok, message = ifc4.export_ifc(bpy.context, path)
+    if not ok:
+        _fail("IFC export failed: " + message)
+    if not os.path.isfile(path) or os.path.getsize(path) < 200:
+        _fail("IFC file missing or too small")
+    with open(path, "r", encoding="utf-8") as handle:
+        text = handle.read()
+    if "ISO-10303-21" not in text or "IFCPROJECT" not in text:
+        _fail("IFC header/project missing")
+    if "IFCTRIANGULATEDFACESET" not in text:
+        _fail("IFC tessellation missing")
+    before = len(bpy.data.objects)
+    ok, message = ifc4.import_ifc(bpy.context, path)
+    if not ok:
+        _fail("IFC import failed: " + message)
+    if len(bpy.data.objects) <= before:
+        _fail("IFC import created no objects")
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+    # Suite identity + ShilpiDB take-off when binaries are available.
+    from bim import shilpi_client
+    from bim import suite_ids
+    from bim import takeoff
+
+    try:
+        suite_ids.assert_slot_vectors()
+    except AssertionError as exc:
+        _fail(str(exc))
+
+    if shilpi_client.find_program("shilpid"):
+        ok, message = takeoff.push_coherent(bpy.context)
+        if not ok:
+            _fail("suite push failed: " + message)
+        ok, message, summary = takeoff.pull_takeoff_summary(bpy.context)
+        if not ok:
+            _fail("take-off status failed: " + message)
+        if not summary or summary["header"].get("format") != "hcw-takeoff-shilpi":
+            _fail("take-off header missing or wrong format")
+
+
 def main():
     import bpy
 
@@ -311,18 +422,48 @@ def main():
         "boolean_intersect",
         "solid_inspect",
         "delete_selection",
+        "bim_ensure_project",
+        "bim_classify",
+        "bim_export_ifc",
+        "bim_import_ifc",
+        "bim_shilpi_connect",
+        "bim_shilpi_push",
+        "bim_shilpi_pull",
+        "bim_suite_push",
+        "bim_takeoff_status",
+        "bim_assign_storey",
+        "bim_inspect",
+        "bim_set_class",
+        "bim_map_to",
+        "bim_context_menu",
+        "set_units",
+        "open_project",
+        "save_project_model",
+        "live_sync_toggle",
     ):
         if not hasattr(bpy.ops.oform, name):
             _fail("oform." + name + " was not registered")
+
+    import design
+
+    if not getattr(design, "BIM_TOOLBAR", None):
+        _fail("design.BIM_TOOLBAR missing")
+    for item in design.BIM_TOOLS:
+        idname, _label = item
+        op = idname.split(".", 1)[-1]
+        if not hasattr(bpy.ops.oform, op):
+            _fail("BIM toolbar op missing: " + idname)
 
     override = _override()
     if override is None:
         _prepare()
         _run(bpy.data.objects["Model"])
+        _run_bim()
     else:
         with override:
             obj = _prepare()
             _run(obj)
+            _run_bim()
     print("OFORM_SELFTEST_OK", flush=True)
     raise SystemExit(0)
 

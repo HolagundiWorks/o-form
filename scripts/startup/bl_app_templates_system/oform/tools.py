@@ -29,13 +29,16 @@ if _HERE not in sys.path:
 import geom
 import groups
 import inference
+import poweruser
 import selection
 import solids
+import units
 
 preview_strokes = []  # list of polylines in model/local space
 preview_guides = []  # inference guide segments [[a, b], ...]
 preview_label = ""
 preview_label_pos = None  # region 2D (x, y) for POST_PIXEL snap tip
+preview_snap_co = None  # local-space snap point for marker overlay
 _PREVIEW_HANDLE = None
 _LABEL_HANDLE = None
 
@@ -108,18 +111,20 @@ def set_preview_strokes(strokes):
 
 def set_inference_feedback(snap):
     """Store snap label + guide lines for the viewport overlay."""
-    global preview_guides, preview_label, preview_label_pos
+    global preview_guides, preview_label, preview_label_pos, preview_snap_co
     if snap is None:
         preview_guides = []
         preview_label = ""
         preview_label_pos = None
+        preview_snap_co = None
     else:
         preview_guides = [[Vector(a), Vector(b)] for a, b in (snap.guides or [])]
         preview_label = snap.label or ""
         preview_label_pos = None
-        if getattr(snap, "co", None) is not None:
+        preview_snap_co = Vector(snap.co) if getattr(snap, "co", None) is not None else None
+        if preview_snap_co is not None:
             try:
-                screen = inference._screen(bpy.context, snap.co)
+                screen = inference._screen(bpy.context, preview_snap_co)
                 if screen is not None:
                     preview_label_pos = (float(screen.x) + 14.0, float(screen.y) + 14.0)
             except Exception:
@@ -196,10 +201,16 @@ def _draw_tool_preview():
             color = (0.2, 0.35, 0.95, 0.9)
         shader.uniform_float("color", color)
         batch_for_shader(shader, "LINES", {"pos": [a, b]}).draw(shader)
+    # Live snap point (endpoint / midpoint / on-edge / on-face).
+    if preview_snap_co is not None:
+        obj = groups.context_object(bpy.context)
+        mat = obj.matrix_world if obj is not None else None
+        pt = tuple(mat @ preview_snap_co) if mat is not None else tuple(preview_snap_co)
+        markers.append(pt)
     if markers:
         if hasattr(gpu.state, "point_size_set"):
-            gpu.state.point_size_set(7.0)
-        shader.uniform_float("color", (0.95, 0.35, 0.12, 1.0))
+            gpu.state.point_size_set(8.0)
+        shader.uniform_float("color", (0.12, 0.72, 0.32, 1.0))
         batch_for_shader(shader, "POINTS", {"pos": markers}).draw(shader)
         if hasattr(gpu.state, "point_size_set"):
             gpu.state.point_size_set(1.0)
@@ -291,17 +302,18 @@ def _do(op, **kwargs):
     return op(True, **kwargs)
 
 
-def _parse_length(text):
-    raw = text.strip().lower().replace(" ", "")
-    if not raw:
-        raise ValueError("empty")
-    factor = 1.0
-    for suffix, scale in (("mm", 0.001), ("cm", 0.01), ("m", 1.0)):
-        if raw.endswith(suffix):
-            raw = raw[: -len(suffix)]
-            factor = scale
-            break
-    return float(raw) * factor
+def _parse_length(text, context=None):
+    """Parse a VCB length into metres. Accepts ', \", mm, m, cm, ft, in, 5'6\"."""
+    scene = None
+    if context is not None:
+        scene = getattr(context, "scene", None)
+    default = units.current_unit(scene)
+    return units.parse_length(text, default_unit=default)
+
+
+def _fmt_length(meters, context=None):
+    scene = getattr(context, "scene", None) if context is not None else None
+    return units.format_length(meters, scene=scene)
 
 
 def _view3d(context):
@@ -377,6 +389,19 @@ class _Tool:
             return self._arm(context, status)
 
     def _event(self, context, event):
+        # Clicks / moves outside the 3D view must reach the status bar, menus,
+        # and side toolbars (theme toggle, units, BIM strip, etc.).
+        if event.type in {
+            "LEFTMOUSE",
+            "RIGHTMOUSE",
+            "MOUSEMOVE",
+            "INBETWEEN_MOUSEMOVE",
+        }:
+            region = context.region
+            if region is not None:
+                x, y = event.mouse_region_x, event.mouse_region_y
+                if x < 0 or y < 0 or x >= region.width or y >= region.height:
+                    return {"PASS_THROUGH"}
         # Orbit, pan, and zoom stay on the middle mouse and the wheel.
         # Ctrl+Z / Ctrl+S stay undo and save. The modal must not swallow them.
         if event.type in {
@@ -397,31 +422,31 @@ class _Tool:
             except RuntimeError:
                 pass
             return {"RUNNING_MODAL"}
-        if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
+        if event.type == "ESC" and event.value == "PRESS":
+            return self._cancel_command(context)
+        if event.type == "RIGHTMOUSE" and event.value == "PRESS":
+            # Right-click opens the BIM menu (map selection → IFC). Esc cancels.
             had_state = (
                 bool(getattr(self, "_points", None))
                 or self._anchor is not None
                 or bool(self._buf)
-                or getattr(self, "_plane", None) is not None
             )
-            if getattr(self, "_points", None) is not None:
-                self._points.clear()
-            self._anchor = None
-            self._buf = ""
-            self._plane = None
-            set_preview([])
-            set_inference_feedback(None)
-            _measure(context, "")
-            if not had_state:
-                if groups.get_entity(context) is not None:
-                    groups.set_entity(context, None)
-                    _status(context, "Selection cleared")
-                    return {"RUNNING_MODAL"}
-                if groups.context_depth(context) > 0:
-                    groups.pop_context(context)
-                    _status(context, "Closed " + groups.context_object(context).name)
-                    return {"RUNNING_MODAL"}
-            _status(context, self._idle_status())
+            if had_state:
+                if getattr(self, "_points", None) is not None:
+                    self._points.clear()
+                self._anchor = None
+                self._buf = ""
+                self._plane = None
+                self._axis = None
+                set_preview([])
+                _measure(context, "")
+            try:
+                bpy.ops.wm.call_menu(name="OFORM_MT_bim_context")
+            except RuntimeError:
+                try:
+                    bpy.ops.oform.bim_context_menu("INVOKE_DEFAULT")
+                except RuntimeError:
+                    pass
             return {"RUNNING_MODAL"}
         if event.value == "PRESS" and not event.ctrl and not event.alt:
             if event.shift:
@@ -484,16 +509,50 @@ class _Tool:
             except RuntimeError:
                 pass
             return {"RUNNING_MODAL"}
-        if event.value == "PRESS" and event.unicode and event.unicode in "0123456789.,-sSmMcC ":
+        # Shift locks the current inference (SketchUp QRC: hold Shift to lock).
+        if event.type in {"LEFT_SHIFT", "RIGHT_SHIFT"} and event.value == "PRESS":
+            snap = self._last_snap
+            if snap is not None and getattr(snap, "tangent", None) is not None:
+                self._parallel = snap.tangent.copy()
+                self._axis = "PARALLEL"
+                _status(context, "Inference locked · " + (snap.label or "Parallel"))
+                return {"RUNNING_MODAL"}
+            if snap is not None and self._anchor is not None:
+                delta = snap.co - self._anchor
+                if delta.length > 1e-8:
+                    if abs(delta.x) >= abs(delta.y) and abs(delta.x) >= abs(delta.z):
+                        self._axis = "X"
+                    elif abs(delta.y) >= abs(delta.z):
+                        self._axis = "Y"
+                    else:
+                        self._axis = "Z"
+                    _status(context, "Inference locked · " + inference.axis_label(self._axis))
+                    return {"RUNNING_MODAL"}
+        # VCB: digits, units (' " mm m cm ft in), array suffixes x * /, segments s.
+        if event.value == "PRESS" and event.unicode and event.unicode in units.VCB_CHARS:
             self._buf += event.unicode
             _measure(context, self._buf)
             return {"RUNNING_MODAL"}
         if event.value == "PRESS" and event.type in {"RET", "NUMPAD_ENTER"}:
-            # O-Draft slash transfer: "/…" on the CAD line goes to Ask.
-            if self._buf.strip().startswith("/"):
+            token = poweruser.parse_array_token(self._buf)
+            if token is not None:
+                count, mode = token
+                if poweruser.last_array() and poweruser.last_array().get("kind") == "rotate":
+                    ok, message = poweruser.apply_rotate_array(context, count, mode)
+                else:
+                    ok, message = poweruser.apply_move_array(context, count, mode)
+                self._buf = ""
+                _measure(context, "")
+                _status(context, message)
+                if not ok:
+                    self.report({"WARNING"}, message)
+                return {"RUNNING_MODAL"}
+            # O-Draft slash transfer: "/…" alone (no trailing digit pattern) → Ask.
+            stripped = self._buf.strip()
+            if stripped.startswith("/") and not poweruser.parse_array_token("2" + stripped):
                 import ai as ask
 
-                text = self._buf.strip()[1:].strip() or self._buf.strip()
+                text = stripped[1:].strip() or stripped
                 context.scene.oform_ask = text
                 ask.propose(context, text)
                 self._buf = ""
@@ -505,6 +564,67 @@ class _Tool:
 
     def _idle_status(self):
         return "Choose a point"
+
+    def _cancel_command(self, context):
+        """Esc: cancel in-progress command, then leave the tool.
+
+        SketchUp ladder:
+        1. Mid-command state (points, VCB, plane) → clear it, stay on tool
+        2. Entity selection → clear it
+        3. Inside a group/component → exit one level
+        4. Non-Select tool → exit modal and return to Select
+        5. Already Select with nothing pending → stay idle
+
+        Right-click opens the BIM context menu (see ``_event``).
+        """
+        had_state = (
+            bool(getattr(self, "_points", None))
+            or self._anchor is not None
+            or bool(self._buf)
+            or getattr(self, "_plane", None) is not None
+        )
+        if getattr(self, "_points", None) is not None:
+            self._points.clear()
+        self._anchor = None
+        self._buf = ""
+        self._plane = None
+        self._axis = None
+        self._parallel = None
+        self._last_snap = None
+        if hasattr(self, "_segments"):
+            self._segments = 0
+        if hasattr(self, "_clicks") and self._clicks is not None:
+            try:
+                self._clicks.reset()
+            except Exception:
+                pass
+        set_preview([])
+        set_inference_feedback(None)
+        _measure(context, "")
+
+        if had_state:
+            _status(context, "Cancelled · " + self._idle_status())
+            return {"RUNNING_MODAL"}
+
+        if groups.get_entity(context) is not None:
+            groups.set_entity(context, None)
+            _status(context, "Selection cleared")
+            return {"RUNNING_MODAL"}
+
+        if groups.context_depth(context) > 0:
+            groups.pop_context(context)
+            _status(context, "Closed " + groups.context_object(context).name)
+            return {"RUNNING_MODAL"}
+
+        # No pending command — leave the active tool for Select.
+        if self.bl_idname != "oform.tool_select":
+            set_preview([])
+            _status(context, "Cancelled")
+            _later("tool_select")
+            return {"FINISHED"}
+
+        _status(context, self._idle_status())
+        return {"RUNNING_MODAL"}
 
 
 def _mouse(event):
@@ -600,8 +720,21 @@ class OFORM_OT_push_pull(Operator):
     def execute(self, context):
         _obj, bm = _edit(context)
         face = geom.selected_face(bm, self.face_index)
-        geom.push_pull(bm, face, self.distance, copy=self.copy)
+        if face is None:
+            self.report({"WARNING"}, "Select a face to push/pull")
+            return {"CANCELLED"}
+        try:
+            result = geom.push_pull(bm, face, self.distance, copy=self.copy)
+        except Exception as exc:
+            self.report({"ERROR"}, "Push/Pull failed: " + str(exc))
+            _status(context, "Push/Pull failed")
+            return {"CANCELLED"}
         _commit(_obj)
+        if result is None and abs(self.distance) > 1e-9:
+            self.report({"WARNING"}, "Push/Pull could not modify that face")
+            return {"CANCELLED"}
+        if abs(self.distance) > 1e-9:
+            poweruser.set_last_push_pull(self.distance)
         return {"FINISHED"}
 
 
@@ -659,8 +792,8 @@ class OFORM_OT_tape(Operator):
             geom.add_guide(bm, self.a, self.b)
             _commit(_obj)
         length = (Vector(self.b) - Vector(self.a)).length
-        _measure(context, "{:.4f}".format(length))
-        _status(context, "Distance {:.4f}".format(length))
+        _measure(context, _fmt_length(length, context))
+        _status(context, "Distance " + _fmt_length(length, context))
         return {"FINISHED"}
 
 
@@ -824,12 +957,16 @@ class OFORM_OT_move(Operator):
         if entity is not None:
             delta = Vector(self.delta)
             if self.copy:
+                base_matrix = entity.matrix_world.copy()
+                unique = True
                 if groups.kind_of(entity) == groups.KIND_COMPONENT:
                     inst = groups.instance_component(context, entity)
                     if inst is None:
                         return {"CANCELLED"}
                     inst.matrix_world.translation = entity.matrix_world.translation + delta
                     groups.set_entity(context, inst)
+                    unique = False
+                    first = inst
                 else:
                     bpy.ops.object.mode_set(mode="OBJECT")
                     clone = entity.copy()
@@ -840,12 +977,36 @@ class OFORM_OT_move(Operator):
                     clone.matrix_world.translation = entity.matrix_world.translation + delta
                     groups.set_entity(context, clone)
                     groups.set_context(context, groups.context_object(context))
+                    first = clone
+                poweruser.remember_array(
+                    "move",
+                    delta=delta,
+                    entity=entity.name,
+                    base_matrix=base_matrix,
+                    first_copy=first.name,
+                    unique_mesh=unique,
+                    extra_names=[],
+                )
+                _status(context, "Copied — type 5x or 3/ for array, Enter")
             else:
                 entity.matrix_world.translation = entity.matrix_world.translation + delta
+                poweruser.clear_array()
             return {"FINISHED"}
         _obj, bm = _edit(context)
         if self.copy:
             geom.duplicate_selected(bm)
+            poweruser.remember_array(
+                "move",
+                delta=Vector(self.delta),
+                entity=None,
+                base_matrix=None,
+                first_copy=None,
+                unique_mesh=True,
+                extra_names=[],
+            )
+            _status(context, "Copied mesh — type 5x or 3/ for array")
+        else:
+            poweruser.clear_array()
         geom.translate_verts(geom.selected_verts(bm), self.delta)
         geom._ensure(bm)
         _commit(_obj)
@@ -860,22 +1021,53 @@ class OFORM_OT_rotate(Operator):
     center: FloatVectorProperty(size=3)
     axis: FloatVectorProperty(size=3, default=(0.0, 0.0, 1.0))
     angle: FloatProperty(default=0.0, subtype="ANGLE")
+    copy: BoolProperty(default=False)
 
     def execute(self, context):
         entity = groups.get_entity(context)
+        center = Vector(self.center)
+        axis = Vector(self.axis)
+        if axis.length < 1e-8:
+            axis = Vector((0.0, 0.0, 1.0))
+        rot = (
+            Matrix.Translation(center)
+            @ Matrix.Rotation(self.angle, 4, axis.normalized())
+            @ Matrix.Translation(-center)
+        )
         if entity is not None:
-            center = Vector(self.center)
-            axis = Vector(self.axis)
-            if axis.length < 1e-8:
-                axis = Vector((0.0, 0.0, 1.0))
-            rot = (
-                Matrix.Translation(center)
-                @ Matrix.Rotation(self.angle, 4, axis.normalized())
-                @ Matrix.Translation(-center)
-            )
-            entity.matrix_world = rot @ entity.matrix_world
+            if self.copy:
+                base_matrix = entity.matrix_world.copy()
+                bpy.ops.object.mode_set(mode="OBJECT")
+                clone = entity.copy()
+                clone.data = (
+                    entity.data
+                    if groups.kind_of(entity) == groups.KIND_COMPONENT
+                    else entity.data.copy()
+                )
+                context.scene.collection.objects.link(clone)
+                if groups.kind_of(entity) == groups.KIND_GROUP:
+                    groups._tag(clone, groups.KIND_GROUP)
+                clone.matrix_world = rot @ entity.matrix_world
+                groups.set_entity(context, clone)
+                poweruser.remember_array(
+                    "rotate",
+                    angle=self.angle,
+                    center=center,
+                    axis=axis.normalized(),
+                    entity=entity.name,
+                    base_matrix=base_matrix,
+                    first_copy=clone.name,
+                    unique_mesh=groups.kind_of(entity) != groups.KIND_COMPONENT,
+                    extra_names=[],
+                )
+                _status(context, "Rotated copy — type 8x or 6/ for array, Enter")
+            else:
+                entity.matrix_world = rot @ entity.matrix_world
+                poweruser.clear_array()
             return {"FINISHED"}
         _obj, bm = _edit(context)
+        if self.copy:
+            geom.duplicate_selected(bm)
         geom.rotate_verts(geom.selected_verts(bm), self.center, self.axis, self.angle)
         geom._ensure(bm)
         _commit(_obj)
@@ -1147,12 +1339,205 @@ class OFORM_OT_solid_inspect(Operator):
         return {"FINISHED"}
 
 
+class OFORM_OT_boolean_trim(Operator):
+    """SketchUp Trim: cutter subtracts from target but cutter remains."""
+
+    bl_idname = "oform.boolean_trim"
+    bl_label = "Solid Trim"
+    bl_description = "Trim the active solid with the other (cutter stays)"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        target, tool = _boolean_operands(context)
+        if target is None or tool is None:
+            hint = "Trim: select two solids (active = keep/trim target)"
+            self.report({"WARNING"}, hint)
+            _status(context, hint)
+            return {"CANCELLED"}
+        if context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+        # Snapshot cutter — DIFFERENCE deletes overlapping volume from target only.
+        ok, message = solids.boolean_objects(context, target, tool, "DIFFERENCE")
+        if not ok:
+            self.report({"ERROR"}, message)
+            _status(context, message)
+            return {"CANCELLED"}
+        _status(context, "Trim complete (cutter kept)")
+        self.report({"INFO"}, "Trim complete")
+        return {"FINISHED"}
+
+
+class OFORM_OT_boolean_outer_shell(Operator):
+    bl_idname = "oform.boolean_outer_shell"
+    bl_label = "Outer Shell"
+    bl_description = "Union overlapping solids into a single outer shell"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        return bpy.ops.oform.boolean(operation="UNION")
+
+
+class OFORM_OT_reverse_faces(Operator):
+    bl_idname = "oform.reverse_faces"
+    bl_label = "Reverse Faces"
+    bl_description = "Flip normals on selected faces (SketchUp Reverse Faces)"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        obj, bm = _edit(context)
+        n = geom.reverse_faces(bm)
+        _commit(obj)
+        _status(context, "Reversed {} face(s)".format(n))
+        return {"FINISHED"}
+
+
+class OFORM_OT_delete_guides(Operator):
+    bl_idname = "oform.delete_guides"
+    bl_label = "Delete Guides"
+    bl_description = "Remove all construction guides from the current edit context"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        obj, bm = _edit(context)
+        n = geom.delete_guides(bm)
+        _commit(obj)
+        msg = "Deleted {} guide(s)".format(n) if n else "No guides"
+        _status(context, msg)
+        return {"FINISHED"}
+
+
+class OFORM_OT_hide_selected(Operator):
+    bl_idname = "oform.hide_selected"
+    bl_label = "Hide"
+    bl_description = "Hide selection (Unhide Last restores)"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        ok, message = poweruser.hide_selected_objects(context)
+        _status(context, message)
+        if not ok:
+            self.report({"WARNING"}, message)
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
+class OFORM_OT_unhide_last(Operator):
+    bl_idname = "oform.unhide_last"
+    bl_label = "Unhide Last"
+    bl_description = "Unhide the last hidden selection (Reddit power-user U)"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        ok, message = poweruser.unhide_last(context)
+        _status(context, message)
+        return {"FINISHED"} if ok else {"CANCELLED"}
+
+
+class OFORM_OT_unhide_all(Operator):
+    bl_idname = "oform.unhide_all"
+    bl_label = "Unhide All"
+    bl_description = "Show all hidden objects and geometry"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        _ok, message = poweruser.unhide_all(context)
+        _status(context, message)
+        return {"FINISHED"}
+
+
+class OFORM_OT_hide_rest(Operator):
+    bl_idname = "oform.hide_rest"
+    bl_label = "Hide Rest of Model"
+    bl_description = "While editing a group, hide everything else"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        ok, message = poweruser.hide_rest_of_model(context)
+        _status(context, message)
+        return {"FINISHED"} if ok else {"CANCELLED"}
+
+
+class OFORM_OT_copy_selection(Operator):
+    bl_idname = "oform.copy_selection"
+    bl_label = "Copy"
+    bl_description = "Copy selection for Paste in Place"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        ok, message = poweruser.copy_selection(context)
+        _status(context, message)
+        return {"FINISHED"} if ok else {"CANCELLED"}
+
+
+class OFORM_OT_paste_in_place(Operator):
+    bl_idname = "oform.paste_in_place"
+    bl_label = "Paste in Place"
+    bl_description = "Paste clipboard objects at their original world location"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        ok, message = poweruser.paste_in_place(context)
+        _status(context, message)
+        return {"FINISHED"} if ok else {"CANCELLED"}
+
+
+class OFORM_OT_face_style(Operator):
+    bl_idname = "oform.face_style"
+    bl_label = "Face Style"
+    bl_description = "Cycle Shaded / X-Ray / Wireframe / Monochrome"
+    bl_options = {"REGISTER"}
+
+    style: EnumProperty(
+        items=(
+            ("CYCLE", "Cycle", ""),
+            ("shaded", "Shaded", ""),
+            ("xray", "X-Ray", ""),
+            ("wire", "Wireframe", ""),
+            ("mono", "Monochrome", ""),
+        ),
+        default="CYCLE",
+    )
+
+    def execute(self, context):
+        style = None if self.style == "CYCLE" else self.style
+        name = poweruser.face_style(context, style)
+        _status(context, "Face style: " + name)
+        return {"FINISHED"}
+
+
+class OFORM_OT_previous_view(Operator):
+    bl_idname = "oform.previous_view"
+    bl_label = "Previous View"
+    bl_description = "Restore the previous camera (SketchUp Previous)"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        ok, message = poweruser.previous_view(context)
+        _status(context, message)
+        return {"FINISHED"} if ok else {"CANCELLED"}
+
+
+class OFORM_OT_zoom_window(Operator):
+    bl_idname = "oform.zoom_window"
+    bl_label = "Zoom Window"
+    bl_description = "Zoom to a drawn rectangle (Blender border zoom)"
+    bl_options = {"REGISTER"}
+
+    def invoke(self, context, event):
+        poweruser.push_view(context)
+        try:
+            return bpy.ops.view3d.zoom_border("INVOKE_DEFAULT")
+        except RuntimeError:
+            self.report({"WARNING"}, "Zoom Window needs a 3D View")
+            return {"CANCELLED"}
+
+
 # ---------------------------------------------------------------------------
 # Modal tools.
 # ---------------------------------------------------------------------------
 
 
-def _snap(context, bm, event, axis, parallel, anchor, plane=None):
+def _snap(context, bm, event, axis, parallel, anchor, plane=None, tool=None):
     snap = inference.infer(
         context,
         bm,
@@ -1163,9 +1548,8 @@ def _snap(context, bm, event, axis, parallel, anchor, plane=None):
         plane=plane,
     )
     set_inference_feedback(snap)
-    # Surface snap label into the status when useful.
-    if snap is not None and snap.label and axis is None:
-        pass
+    if tool is not None:
+        tool._last_snap = snap
     return snap
 
 
@@ -1181,7 +1565,7 @@ class OFORM_OT_tool_line(Operator, _Tool):
         handled = self._event(context, event)
         if handled in ({"FINISHED"}, {"PASS_THROUGH"}):
             return handled
-        if handled == {"RUNNING_MODAL"} and event.type in {"ESC", "RIGHTMOUSE"}:
+        if handled == {"RUNNING_MODAL"} and event.type == "ESC":
             self._segments = 0
             return handled
         _obj, bm = _edit(context)
@@ -1204,7 +1588,7 @@ class OFORM_OT_tool_line(Operator, _Tool):
             return {"RUNNING_MODAL"}
         if handled == {"APPLY"} and self._points and self._buf.strip():
             try:
-                length = _parse_length(self._buf)
+                length = _parse_length(self._buf, context)
             except ValueError:
                 return {"RUNNING_MODAL"}
             direction = snap.co - self._points[-1]
@@ -1219,7 +1603,7 @@ class OFORM_OT_tool_line(Operator, _Tool):
         if self._points:
             set_preview([self._points[-1], snap.co])
             label = ("  " + snap.label) if snap.label else ""
-            _measure(context, "{:.3f}{}".format((snap.co - self._points[-1]).length, label))
+            _measure(context, _fmt_length((snap.co - self._points[-1]).length, context) + label)
             _status(context, (snap.label + "  " if snap.label else "") + "Click the next point, or type a length")
         return {"RUNNING_MODAL"}
 
@@ -1270,8 +1654,8 @@ class OFORM_OT_tool_rectangle(Operator, _Tool):
         if handled == {"APPLY"} and self._anchor is not None and "," in self._buf:
             try:
                 width_s, depth_s = self._buf.split(",", 1)
-                width = _parse_length(width_s)
-                depth = _parse_length(depth_s)
+                width = _parse_length(width_s, context)
+                depth = _parse_length(depth_s, context)
             except ValueError:
                 return {"RUNNING_MODAL"}
             normal = getattr(self, "_normal", Vector((0.0, 0.0, 1.0)))
@@ -1293,10 +1677,13 @@ class OFORM_OT_tool_rectangle(Operator, _Tool):
             normal = getattr(self, "_normal", snap.normal)
             corners = geom.rectangle_corners(self._anchor, snap.co, normal)
             set_preview(corners + [corners[0]])
-            _measure(context, "{:.3f}, {:.3f}".format(
-                (corners[1] - corners[0]).length,
-                (corners[3] - corners[0]).length,
-            ))
+            _measure(
+                context,
+                "{}, {}".format(
+                    _fmt_length((corners[1] - corners[0]).length, context),
+                    _fmt_length((corners[3] - corners[0]).length, context),
+                ),
+            )
         return {"RUNNING_MODAL"}
 
 
@@ -1351,7 +1738,7 @@ class OFORM_OT_tool_circle(Operator, _Tool):
             return {"RUNNING_MODAL"}
         if handled == {"APPLY"} and self._anchor is not None and self._buf.strip():
             try:
-                radius = _parse_length(self._buf)
+                radius = _parse_length(self._buf, context)
             except ValueError:
                 return {"RUNNING_MODAL"}
             _do(
@@ -1375,7 +1762,7 @@ class OFORM_OT_tool_circle(Operator, _Tool):
             )
             if pts:
                 set_preview(pts + [pts[0]])
-            _measure(context, "{:.3f}".format((snap.co - self._anchor).length))
+            _measure(context, _fmt_length((snap.co - self._anchor).length, context))
         return {"RUNNING_MODAL"}
 
 
@@ -1432,7 +1819,10 @@ class OFORM_OT_tool_push_pull(Operator, _Tool):
         self._face_index = -1
         self._origin = None
         self._direction = Vector((0.0, 0.0, 1.0))
-        return self._start(context, "Click a face to push or pull")
+        self._clicks = selection.ClickTracker()
+        last = poweruser.last_push_pull()
+        hint = " · double-click repeats {:.3f}".format(last) if abs(last) > 1e-9 else ""
+        return self._start(context, "Click a face to push/pull · Ctrl copies" + hint)
 
     def modal(self, context, event):
         handled = self._event(context, event)
@@ -1440,13 +1830,26 @@ class OFORM_OT_tool_push_pull(Operator, _Tool):
             return handled
         obj, bm = _edit(context)
         if self._origin is None:
-            snap = _snap(context, bm, event, None, None, None)
-            if snap.kind == "face":
-                _status(context, "Click the face")
+            _snap(context, bm, event, None, None, None, tool=self)
         if event.type == "LEFTMOUSE" and event.value == "PRESS":
             if self._origin is None:
                 face = _face_under_mouse(context, bm, event)
                 if face is None:
+                    return {"RUNNING_MODAL"}
+                count = self._clicks.register(_mouse(event))
+                last = poweruser.last_push_pull()
+                # SketchUp: double-click applies last Push/Pull amount.
+                if count >= 2 and abs(last) > 1e-9:
+                    geom._select_only_face(bm, face)
+                    _commit(obj)
+                    bm.faces.ensure_lookup_table()
+                    _do(
+                        bpy.ops.oform.push_pull,
+                        distance=last,
+                        face_index=face.index,
+                        copy=event.ctrl,
+                    )
+                    _status(context, "Repeated Push/Pull {:.3f}".format(last))
                     return {"RUNNING_MODAL"}
                 geom._select_only_face(bm, face)
                 _commit(obj)
@@ -1468,11 +1871,11 @@ class OFORM_OT_tool_push_pull(Operator, _Tool):
                 self._buf = ""
                 set_preview([])
                 _measure(context, "")
-                _status(context, "Click a face to push or pull")
+                _status(context, "Click a face · double-click repeats last")
             return {"RUNNING_MODAL"}
         if handled == {"APPLY"} and self._origin is not None and self._buf.strip():
             try:
-                distance = _parse_length(self._buf)
+                distance = _parse_length(self._buf, context)
             except ValueError:
                 return {"RUNNING_MODAL"}
             _do(
@@ -1485,11 +1888,11 @@ class OFORM_OT_tool_push_pull(Operator, _Tool):
             self._buf = ""
             set_preview([])
             _measure(context, "")
-            _status(context, "Click a face to push or pull")
+            _status(context, "Click a face · double-click repeats last")
             return {"RUNNING_MODAL"}
         if self._origin is not None:
             distance = self._distance(context, event)
-            _measure(context, "{:.3f}".format(distance))
+            _measure(context, _fmt_length(distance, context))
             self._preview_extrude(bm, distance)
         else:
             set_preview([])
@@ -1573,7 +1976,7 @@ class OFORM_OT_tool_offset(Operator, _Tool):
             return {"RUNNING_MODAL"}
         if handled == {"APPLY"} and self._face_index >= 0 and self._buf.strip():
             try:
-                distance = _parse_length(self._buf)
+                distance = _parse_length(self._buf, context)
             except ValueError:
                 return {"RUNNING_MODAL"}
             _do(bpy.ops.oform.offset, distance=distance, face_index=self._face_index)
@@ -1583,7 +1986,7 @@ class OFORM_OT_tool_offset(Operator, _Tool):
             return {"RUNNING_MODAL"}
         if self._origin is not None and self._face_index >= 0:
             snap = _snap(context, bm, event, None, None, self._origin)
-            _measure(context, "{:.3f}".format((snap.co - self._origin).length))
+            _measure(context, _fmt_length((snap.co - self._origin).length, context))
         return {"RUNNING_MODAL"}
 
 
@@ -1660,20 +2063,23 @@ class OFORM_OT_tool_paint(Operator, _Tool):
 class OFORM_OT_tool_select(Operator, _Tool):
     bl_idname = "oform.tool_select"
     bl_label = "Select"
-    bl_description = "Select geometry. Click · double related · triple connected. Alt+1/2/3"
+    bl_description = "Click line · double face · triple connected faces. Alt+1/2/3"
 
     def invoke(self, context, _event):
         self._box = None
         self._clicks = selection.ClickTracker()
-        self._pending = None  # (mouse, extend, token) awaiting single-click settle
-        self._token = 0
         return self._start(
             context,
-            "Click · double related · triple connected · Alt+1/2/3. Esc closes",
+            "Click point/line · double face · triple connected · Alt+1/2/3",
         )
 
     def _apply_selection(self, context, mouse, count, extend):
         obj, bm = _edit(context)
+        # Ensure verts/edges/faces can all highlight (SketchUp Select).
+        try:
+            context.tool_settings.mesh_select_mode = (True, True, True)
+        except Exception:
+            pass
         mode = selection.apply_click(context, bm, mouse, count, extend=extend)
         _commit(obj)
         if mode == "enter":
@@ -1687,13 +2093,43 @@ class OFORM_OT_tool_select(Operator, _Tool):
                     "Selected {} ({})".format(entity.name, groups.kind_of(entity)),
                 )
         elif mode == "double":
-            _status(context, "Related geometry selected")
+            _status(context, "Face selected")
         elif mode == "triple":
-            _status(context, "Connected geometry selected")
+            _status(context, "Connected faces selected")
         elif mode == "single":
-            _status(context, "Selected")
+            hit = selection.pick_mesh(context, bm, mouse)
+            if hit and hit[0] == "vert":
+                _status(context, "Point selected")
+            elif hit and hit[0] == "edge":
+                _status(context, "Line selected")
+            elif hit and hit[0] == "face":
+                _status(context, "Face selected")
+            else:
+                _status(context, "Selected")
         else:
             _status(context, "Selection cleared")
+
+    def _hover_snap(self, context, event):
+        obj, bm = _edit(context)
+        snap = selection.hover_snap(context, bm, _mouse(event))
+        set_inference_feedback(snap)
+        self._last_snap = snap
+        if snap is not None and snap.label:
+            current = getattr(context.scene, "oform_status", "") or ""
+            if current in {
+                "",
+                "Select a tool",
+                "Click line · double face · triple connected · Alt+1/2/3",
+                "Line selected",
+                "Face selected",
+                "Connected faces selected",
+                "Selection cleared",
+                "Endpoint",
+                "Midpoint",
+                "On Edge",
+                "On Face",
+            }:
+                _status(context, snap.label)
 
     def modal(self, context, event):
         handled = self._event(context, event)
@@ -1705,21 +2141,28 @@ class OFORM_OT_tool_select(Operator, _Tool):
             hit = selection.pick_mesh(context, bm, _mouse(event))
             selection.select_entity(bm, hit, extend=event.shift)
             _commit(obj)
-            _status(context, "Selected entity (Alt+1)")
+            _status(context, "Line selected (Alt+1)")
             return {"RUNNING_MODAL"}
         if event.value == "PRESS" and event.type == "TWO" and event.alt:
             obj, bm = _edit(context)
             hit = selection.pick_mesh(context, bm, _mouse(event))
-            selection.select_related(bm, hit, extend=event.shift)
+            selection.select_related(
+                bm, hit, extend=event.shift, mouse=_mouse(event), context=context
+            )
             _commit(obj)
-            _status(context, "Related geometry (Alt+2)")
+            _status(context, "Face selected (Alt+2)")
             return {"RUNNING_MODAL"}
         if event.value == "PRESS" and event.type == "THREE" and event.alt:
             obj, bm = _edit(context)
             hit = selection.pick_mesh(context, bm, _mouse(event))
-            selection.select_connected(bm, hit, extend=event.shift)
+            selection.select_connected(
+                bm, hit, extend=event.shift, mouse=_mouse(event), context=context
+            )
             _commit(obj)
-            _status(context, "Connected geometry (Alt+3)")
+            _status(context, "Connected faces (Alt+3)")
+            return {"RUNNING_MODAL"}
+        if event.type == "MOUSEMOVE" and self._box is None:
+            self._hover_snap(context, event)
             return {"RUNNING_MODAL"}
         if event.type == "LEFTMOUSE" and event.value == "PRESS":
             self._box = (_mouse(event), _mouse(event), event.shift or event.ctrl)
@@ -1731,29 +2174,11 @@ class OFORM_OT_tool_select(Operator, _Tool):
             start, end, extend = self._box
             self._box = None
             if (Vector(start) - Vector(end)).length < 4.0:
+                # SketchUp: apply immediately; double/triple upgrades the selection.
                 count = self._clicks.register(end)
-                if count >= 2:
-                    # Double/triple supersedes any pending single-click.
-                    self._token += 1
-                    self._pending = None
-                    self._apply_selection(context, end, count, extend)
-                else:
-                    # Defer single-click until the multi-click window closes.
-                    self._token += 1
-                    token = self._token
-                    mouse = end
-                    ext = extend
-
-                    def _settle():
-                        if getattr(self, "_token", None) != token:
-                            return None
-                        self._apply_selection(context, mouse, 1, ext)
-                        return None
-
-                    bpy.app.timers.register(_settle, first_interval=selection.DOUBLE_S)
+                self._apply_selection(context, end, count, extend)
             else:
                 self._clicks.reset()
-                self._token += 1
                 groups.set_entity(context, None)
                 obj, bm = _edit(context)
                 _box_select(context, bm, start, end, extend)
@@ -1767,12 +2192,25 @@ class OFORM_OT_tool_move(Operator, _Tool):
     bl_label = "Move"
 
     def invoke(self, context, _event):
-        return self._start(context, "Click a base point on the selection")
+        self._copy = False
+        return self._start(
+            context, "Click a base point · Ctrl toggles copy · then 5x / 3/ for arrays"
+        )
 
     def modal(self, context, event):
         handled = self._event(context, event)
         if handled in ({"FINISHED"}, {"PASS_THROUGH"}):
             return handled
+        if event.type == "LEFT_CTRL" or event.type == "RIGHT_CTRL":
+            if event.value == "PRESS":
+                self._copy = not getattr(self, "_copy", False)
+                _status(
+                    context,
+                    "Copy ON — click destination, then type 5x or 3/"
+                    if self._copy
+                    else "Copy OFF — move selection",
+                )
+                return {"RUNNING_MODAL"}
         obj, bm = _edit(context)
         entity = groups.get_entity(context)
         if (
@@ -1788,32 +2226,43 @@ class OFORM_OT_tool_move(Operator, _Tool):
             else:
                 _pick_select(context, bm, _mouse(event), False)
                 _commit(obj)
-        snap = _snap(context, bm, event, self._axis, self._parallel, self._anchor)
+        snap = _snap(context, bm, event, self._axis, self._parallel, self._anchor, tool=self)
         if snap.tangent is not None:
             self._parallel = snap.tangent
+        do_copy = getattr(self, "_copy", False) or event.ctrl
         if event.type == "LEFTMOUSE" and event.value == "PRESS":
             if self._anchor is None:
                 self._anchor = snap.co.copy()
-                _status(context, "Click the destination, or type a distance. Ctrl copies")
+                _status(
+                    context,
+                    "Click destination · Ctrl=copy · type distance · after copy: 5x / 3/",
+                )
             else:
                 delta = snap.co - self._anchor
-                _do(bpy.ops.oform.move, delta=delta, copy=event.ctrl)
+                _do(bpy.ops.oform.move, delta=delta, copy=do_copy)
                 self._anchor = None
                 self._buf = ""
                 set_preview([])
                 _measure(context, "")
-                _status(context, "Click a base point on the selection")
+                _status(
+                    context,
+                    "Array: type 5x or 3/ then Enter"
+                    if do_copy
+                    else "Click a base point on the selection",
+                )
             return {"RUNNING_MODAL"}
         if handled == {"APPLY"} and self._anchor is not None and self._buf.strip():
+            if poweruser.parse_array_token(self._buf):
+                return {"RUNNING_MODAL"}  # handled in _event
             try:
-                length = _parse_length(self._buf)
+                length = _parse_length(self._buf, context)
             except ValueError:
                 return {"RUNNING_MODAL"}
             direction = snap.co - self._anchor
             if direction.length < 1e-8:
                 direction = Vector((1.0, 0.0, 0.0))
             delta = direction.normalized() * length
-            _do(bpy.ops.oform.move, delta=delta, copy=event.ctrl)
+            _do(bpy.ops.oform.move, delta=delta, copy=do_copy)
             self._anchor = None
             self._buf = ""
             set_preview([])
@@ -1821,7 +2270,7 @@ class OFORM_OT_tool_move(Operator, _Tool):
             return {"RUNNING_MODAL"}
         if self._anchor is not None:
             set_preview([self._anchor, snap.co])
-            _measure(context, "{:.3f}".format((snap.co - self._anchor).length))
+            _measure(context, _fmt_length((snap.co - self._anchor).length, context))
         return {"RUNNING_MODAL"}
 
 
@@ -1832,17 +2281,23 @@ class OFORM_OT_tool_rotate(Operator, _Tool):
     def invoke(self, context, _event):
         self._ref = None
         self._axis_vec = Vector((0.0, 0.0, 1.0))
-        return self._start(context, "Click the rotation center")
+        self._copy = False
+        return self._start(context, "Click rotation center · Ctrl toggles copy (circular arrays)")
 
     def modal(self, context, event):
         handled = self._event(context, event)
         if handled in ({"FINISHED"}, {"PASS_THROUGH"}):
             return handled
+        if event.type in {"LEFT_CTRL", "RIGHT_CTRL"} and event.value == "PRESS":
+            self._copy = not getattr(self, "_copy", False)
+            _status(context, "Copy ON" if self._copy else "Copy OFF")
+            return {"RUNNING_MODAL"}
         obj, bm = _edit(context)
         if event.type == "LEFTMOUSE" and event.value == "PRESS" and self._anchor is None and not geom.selected_verts(bm):
             _pick_select(context, bm, _mouse(event), False)
             _commit(obj)
-        snap = _snap(context, bm, event, None, None, None)
+        snap = _snap(context, bm, event, None, None, None, tool=self)
+        do_copy = getattr(self, "_copy", False) or event.ctrl
         if event.type == "LEFTMOUSE" and event.value == "PRESS":
             if self._anchor is None:
                 self._anchor = snap.co.copy()
@@ -1850,23 +2305,40 @@ class OFORM_OT_tool_rotate(Operator, _Tool):
                 _status(context, "Click the reference point")
             elif self._ref is None:
                 self._ref = snap.co.copy()
-                _status(context, "Click the destination, or type degrees")
+                _status(context, "Click destination or type degrees · Ctrl=copy · then 8x / 6/")
             else:
                 angle = _signed_angle(self._anchor, self._ref, snap.co, self._axis_vec)
-                _do(bpy.ops.oform.rotate, center=self._anchor, axis=self._axis_vec, angle=angle)
+                _do(
+                    bpy.ops.oform.rotate,
+                    center=self._anchor,
+                    axis=self._axis_vec,
+                    angle=angle,
+                    copy=do_copy,
+                )
                 self._anchor = None
                 self._ref = None
                 self._buf = ""
                 set_preview([])
                 _measure(context, "")
-                _status(context, "Click the rotation center")
+                _status(
+                    context,
+                    "Array: type 8x or 6/ then Enter" if do_copy else "Click the rotation center",
+                )
             return {"RUNNING_MODAL"}
         if handled == {"APPLY"} and self._anchor is not None and self._ref is not None and self._buf.strip():
+            if poweruser.parse_array_token(self._buf):
+                return {"RUNNING_MODAL"}
             try:
-                angle = math.radians(_parse_length(self._buf))
+                angle = math.radians(_parse_length(self._buf, context))
             except ValueError:
                 return {"RUNNING_MODAL"}
-            _do(bpy.ops.oform.rotate, center=self._anchor, axis=self._axis_vec, angle=angle)
+            _do(
+                bpy.ops.oform.rotate,
+                center=self._anchor,
+                axis=self._axis_vec,
+                angle=angle,
+                copy=do_copy,
+            )
             self._anchor = None
             self._ref = None
             self._buf = ""
@@ -1966,7 +2438,7 @@ class OFORM_OT_tool_tape(Operator, _Tool):
             return {"RUNNING_MODAL"}
         if handled == {"APPLY"} and self._anchor is not None and self._buf.strip():
             try:
-                length = _parse_length(self._buf)
+                length = _parse_length(self._buf, context)
             except ValueError:
                 return {"RUNNING_MODAL"}
             direction = snap.co - self._anchor
@@ -1980,7 +2452,7 @@ class OFORM_OT_tool_tape(Operator, _Tool):
             return {"RUNNING_MODAL"}
         if self._anchor is not None:
             set_preview([self._anchor, snap.co])
-            _measure(context, "{:.3f}".format((snap.co - self._anchor).length))
+            _measure(context, _fmt_length((snap.co - self._anchor).length, context))
         return {"RUNNING_MODAL"}
 
 
@@ -2038,7 +2510,7 @@ class OFORM_OT_tool_polygon(Operator, _Tool):
             return {"RUNNING_MODAL"}
         if handled == {"APPLY"} and self._anchor is not None and self._buf.strip():
             try:
-                radius = _parse_length(self._buf)
+                radius = _parse_length(self._buf, context)
             except ValueError:
                 return {"RUNNING_MODAL"}
             _do(
@@ -2059,7 +2531,7 @@ class OFORM_OT_tool_polygon(Operator, _Tool):
             pts = geom.polygon_points(self._anchor, radius, self._normal, self._sides)
             if pts:
                 set_preview(pts + [pts[0]])
-            _measure(context, "{:.3f}".format(radius))
+            _measure(context, _fmt_length(radius, context))
         return {"RUNNING_MODAL"}
 
 
@@ -2229,6 +2701,8 @@ class OFORM_OT_view(Operator):
         override = _view3d(context)
         if override is None:
             return {"CANCELLED"}
+        if self.mode in {"EXTENTS", "TOP", "FRONT", "RIGHT", "ISO", "PERSP", "ORTHO"}:
+            poweruser.push_view(context)
         with context.temp_override(**override):
             if self.mode == "ORBIT":
                 bpy.ops.view3d.rotate("INVOKE_DEFAULT")
@@ -2432,7 +2906,38 @@ def _signed_angle(center, reference, dest, axis):
     return angle
 
 
+class OFORM_OT_cancel_command(Operator):
+    """Cancel the active command when no modal tool is eating Esc."""
+
+    bl_idname = "oform.cancel_command"
+    bl_label = "Cancel Command"
+    bl_description = "Cancel the active command (Esc)"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        set_preview([])
+        set_inference_feedback(None)
+        _measure(context, "")
+        active = _prop(context.scene, "oform_tool") or ""
+        if groups.get_entity(context) is not None:
+            groups.set_entity(context, None)
+            _status(context, "Selection cleared")
+            return {"FINISHED"}
+        if groups.context_depth(context) > 0:
+            groups.pop_context(context)
+            _status(context, "Closed " + groups.context_object(context).name)
+            return {"FINISHED"}
+        if active and active != "oform.tool_select":
+            _status(context, "Cancelled")
+            _later("tool_select")
+            return {"FINISHED"}
+        _status(context, "Select a tool")
+        _tool(context, "oform.tool_select")
+        return {"FINISHED"}
+
+
 _CLASSES = (
+    OFORM_OT_cancel_command,
     OFORM_OT_rectangle,
     OFORM_OT_line_add,
     OFORM_OT_circle,
@@ -2461,7 +2966,20 @@ _CLASSES = (
     OFORM_OT_boolean_union,
     OFORM_OT_boolean_subtract,
     OFORM_OT_boolean_intersect,
+    OFORM_OT_boolean_trim,
+    OFORM_OT_boolean_outer_shell,
     OFORM_OT_solid_inspect,
+    OFORM_OT_reverse_faces,
+    OFORM_OT_delete_guides,
+    OFORM_OT_hide_selected,
+    OFORM_OT_unhide_last,
+    OFORM_OT_unhide_all,
+    OFORM_OT_hide_rest,
+    OFORM_OT_copy_selection,
+    OFORM_OT_paste_in_place,
+    OFORM_OT_face_style,
+    OFORM_OT_previous_view,
+    OFORM_OT_zoom_window,
     OFORM_OT_tool_select,
     OFORM_OT_tool_eraser,
     OFORM_OT_tool_paint,
@@ -2496,11 +3014,11 @@ _TOOL_DESCRIPTIONS = {
     "oform.tool_arc": "Draw an arc with three clicks",
     "oform.tool_polygon": "Regular polygon. Type 8s for sides before radius",
     "oform.tool_freehand": "Sketch a freehand curve",
-    "oform.tool_push_pull": "Extrude a face. Ctrl copies",
+    "oform.tool_push_pull": "Extrude a face. Ctrl copies. Double-click repeats last",
     "oform.tool_follow_me": "Extrude a face along a path",
     "oform.tool_offset": "Offset edges of a face",
-    "oform.tool_move": "Move selection. Ctrl copies",
-    "oform.tool_rotate": "Rotate selection about a point",
+    "oform.tool_move": "Move. Ctrl copies. After copy type 5x or 3/ for arrays",
+    "oform.tool_rotate": "Rotate. Ctrl copies. After copy type 8x or 6/ for circular arrays",
     "oform.tool_scale": "Scale selection",
     "oform.tool_eraser": "Erase edges and faces. Ctrl soften, Shift hide",
     "oform.tool_paint": "Paint faces with the current material colour",

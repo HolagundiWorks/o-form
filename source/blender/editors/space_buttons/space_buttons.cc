@@ -84,24 +84,14 @@ static SpaceLink *buttons_create(const ScrArea * /*area*/, const Scene * /*scene
   region->regiontype = RGN_TYPE_HEADER;
   region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
 
-  /* navigation bar */
-  region = BKE_area_region_new();
-
-  BLI_addtail(&sbuts->regionbase, region);
-  region->regiontype = RGN_TYPE_NAV_BAR;
-  region->alignment = RGN_ALIGN_LEFT;
-  /* O-Form's left pane is the tool list, not Blender's property tabs. */
-  if (STREQ(U.app_template, "oform")) {
-    region->flag |= RGN_FLAG_HIDDEN;
+  /* Navigation bar (property tabs). O-Form's left pane is tools only — do not
+   * create this region (removed, not hidden). */
+  if (!STREQ(U.app_template, "oform")) {
+    region = BKE_area_region_new();
+    BLI_addtail(&sbuts->regionbase, region);
+    region->regiontype = RGN_TYPE_NAV_BAR;
+    region->alignment = RGN_ALIGN_LEFT;
   }
-
-#if 0
-  /* context region */
-  region = BKE_area_region_new();
-  BLI_addtail(&sbuts->regionbase, region);
-  region->regiontype = RGN_TYPE_CHANNELS;
-  region->alignment = RGN_ALIGN_TOP;
-#endif
 
   /* main region */
   region = BKE_area_region_new();
