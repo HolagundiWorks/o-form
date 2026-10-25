@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import bpy
-from bpy.props import EnumProperty, FloatProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, StringProperty
 from bpy.types import Operator
 
 from . import classify
@@ -22,6 +22,7 @@ from . import spatial
 from . import suite_ids
 from . import takeoff
 from . import taxonomy
+from . import thickness
 
 
 def _targets(context):
@@ -205,12 +206,15 @@ class OFORM_OT_bim_set_class(Operator):
         return context.window_manager.invoke_props_dialog(self)
 
 
+_WALL_CLASSES = {"IfcWall", "IfcWallStandardCase"}
+
+
 class OFORM_OT_bim_map_to(Operator):
     bl_idname = "oform.bim_map_to"
     bl_label = "Map to IFC Component"
     bl_description = (
         "Map the selection to an IFC component. "
-        "Edit-mode geometry is promoted to a component first"
+        "Walls can snap thickness to 4.5\" or 9\""
     )
     bl_options = {"REGISTER", "UNDO"}
 
@@ -219,8 +223,20 @@ class OFORM_OT_bim_map_to(Operator):
         items=tuple((key, label, "") for key, label in taxonomy.ELEMENTS),
         default=taxonomy.DEFAULT_ELEMENT,
     )
+    snap: EnumProperty(
+        name="Width",
+        items=(
+            ("KEEP", "Keep as-is", "Leave the modelled thickness"),
+            ("SNAP45", 'Snap to 4.5"', "Scale the thin axis to 4.5 inches"),
+            ("SNAP9", 'Snap to 9"', "Scale the thin axis to 9 inches"),
+            ("LOCAL", "Normalize local thickness", "Flatten each wall run; no whole-object scale"),
+        ),
+        default="KEEP",
+    )
+    is_corner: BoolProperty(name="Corner", default=False)
+    hint: StringProperty(name="Hint", default="")
 
-    def execute(self, context):
+    def _resolve_targets(self, context):
         targets = _targets(context)
         if not targets and _has_edit_geom_selection(context):
             promoted = _promote_edit_selection(
@@ -228,6 +244,55 @@ class OFORM_OT_bim_map_to(Operator):
             )
             if promoted is not None:
                 targets = [promoted]
+        return targets
+
+    def invoke(self, context, _event):
+        if self.ifc_class not in _WALL_CLASSES:
+            return self.execute(context)
+        targets = _targets(context)
+        if not targets:
+            self.is_corner = False
+            self.snap = "KEEP"
+            self.hint = "Width is measured after the selection becomes a component."
+            return context.window_manager.invoke_props_dialog(self, width=420)
+        info = thickness.inspect(targets[0])
+        self.is_corner = bool(info["corner"])
+        if info["corner"]:
+            self.snap = "KEEP"
+            self.hint = (
+                "Corner wall — thickness is per run; whole-object width snap skipped. "
+                "Measured ~{}.".format(info["label"] or "—")
+            )
+        else:
+            nearest = '4.5"' if info["nearest_id"] == "4.5" else '9"'
+            if info["in_band"]:
+                self.snap = "SNAP45" if info["nearest_id"] == "4.5" else "SNAP9"
+            else:
+                self.snap = "KEEP"
+            self.hint = "Measured width {} on {} axis. Nearest standard {}.".format(
+                info["label"] or "—", info["axis"], nearest
+            )
+        return context.window_manager.invoke_props_dialog(self, width=420)
+
+    def draw(self, context):
+        _ = context
+        if self.ifc_class not in _WALL_CLASSES:
+            return
+        col = self.layout.column(align=True)
+        col.label(text=self.hint)
+        col.separator()
+        if self.is_corner:
+            col.prop_enum(self, "snap", "KEEP", text="Keep geometry")
+            col.prop_enum(
+                self, "snap", "LOCAL", text="Normalize local thickness"
+            )
+        else:
+            col.prop_enum(self, "snap", "KEEP", text="Keep as-is")
+            col.prop_enum(self, "snap", "SNAP45", text='Snap to 4.5"')
+            col.prop_enum(self, "snap", "SNAP9", text='Snap to 9"')
+
+    def execute(self, context):
+        targets = self._resolve_targets(context)
         if not targets:
             self.report(
                 {"WARNING"},
@@ -236,8 +301,16 @@ class OFORM_OT_bim_map_to(Operator):
             return {"CANCELLED"}
         count = _apply_ifc_class(context, targets, self.ifc_class)
         label = taxonomy.label_of(self.ifc_class)
-        msg = "Mapped {} → {}".format(count, label)
-        context.scene.oform_status = msg
+        extra = ""
+        if self.ifc_class in _WALL_CLASSES and self.snap != "KEEP":
+            notes = []
+            for obj in targets:
+                notes.append(thickness.apply_mode(obj, self.snap))
+            extra = " · " + notes[0]
+            if len(notes) > 1:
+                extra += " (+{})".format(len(notes) - 1)
+        msg = "Mapped {} → {}{}".format(count, label, extra)
+        context.scene.oform_status = msg[:80]
         self.report({"INFO"}, msg)
         return {"FINISHED"}
 
@@ -268,13 +341,27 @@ class OFORM_OT_bim_export_ifc(Operator):
 
     filepath: StringProperty(subtype="FILE_PATH")
     filename_ext = ".ifc"
-    filter_glob: StringProperty(default="*.ifc", options={"HIDDEN"})
+    filter_glob: StringProperty(default="*.ifc;*.ifczip", options={"HIDDEN"})
 
     def execute(self, context):
+        import os
+        import zipfile
+
         path = self.filepath
-        if not path.lower().endswith(".ifc"):
-            path += ".ifc"
-        ok, message = ifc4.export_ifc(context, path)
+        zipped = path.lower().endswith(".ifczip")
+        ifc_path = os.path.splitext(path)[0] + ".ifc" if zipped else path
+        if not ifc_path.lower().endswith(".ifc"):
+            ifc_path += ".ifc"
+            path = ifc_path
+        ok, message = ifc4.export_ifc(context, ifc_path)
+        if ok and zipped:
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+                bundle.write(ifc_path, os.path.basename(ifc_path))
+            try:
+                os.remove(ifc_path)
+            except OSError:
+                pass
+            message = "Exported " + os.path.basename(path)
         context.scene.oform_status = message[:80]
         if not ok:
             self.report({"ERROR"}, message)
@@ -296,10 +383,29 @@ class OFORM_OT_bim_import_ifc(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     filepath: StringProperty(subtype="FILE_PATH")
-    filter_glob: StringProperty(default="*.ifc", options={"HIDDEN"})
+    filter_glob: StringProperty(default="*.ifc;*.ifczip", options={"HIDDEN"})
 
     def execute(self, context):
-        ok, message = ifc4.import_ifc(context, self.filepath)
+        import tempfile
+        import zipfile
+
+        path = self.filepath
+        if path.lower().endswith(".ifczip"):
+            try:
+                with zipfile.ZipFile(path) as bundle:
+                    name = next(
+                        (item for item in bundle.namelist() if item.lower().endswith(".ifc")),
+                        None,
+                    )
+                    if name is None:
+                        self.report({"ERROR"}, "IFCZIP has no .ifc member")
+                        return {"CANCELLED"}
+                    folder = tempfile.mkdtemp(prefix="oform-ifc-")
+                    path = bundle.extract(name, folder)
+            except (OSError, zipfile.BadZipFile) as exc:
+                self.report({"ERROR"}, str(exc))
+                return {"CANCELLED"}
+        ok, message = ifc4.import_ifc(context, path)
         context.scene.oform_status = message[:80]
         if not ok:
             self.report({"ERROR"}, message)

@@ -39,6 +39,9 @@ preview_guides = []  # inference guide segments [[a, b], ...]
 preview_label = ""
 preview_label_pos = None  # region 2D (x, y) for POST_PIXEL snap tip
 preview_snap_co = None  # local-space snap point for marker overlay
+dyn_typed = ""  # characters the user is typing; wins over the live length
+dyn_live = ""  # rubber-band dimension while the pointer moves
+dyn_pos = None  # region 2D anchor for the cursor field
 _PREVIEW_HANDLE = None
 _LABEL_HANDLE = None
 
@@ -219,8 +222,67 @@ def _draw_tool_preview():
     gpu.state.depth_test_set("LESS_EQUAL")
 
 
+def set_dyn_cursor(x, y):
+    """Park the dimension field just below the pointer."""
+    global dyn_pos
+    dyn_pos = (float(x) + 16.0, float(y) - 30.0)
+    _tag_preview_redraw()
+
+
+def _draw_dyn_input():
+    """Floating dimension field that follows the cursor (dynamic input)."""
+    text = dyn_typed if dyn_typed else dyn_live
+    text = (text or "").strip()
+    if not text or dyn_pos is None:
+        return
+    try:
+        import blf
+        import gpu
+        from gpu_extras.batch import batch_for_shader
+    except ImportError:
+        return
+    context = bpy.context
+    region = getattr(context, "region", None)
+    if region is None or region.type != "WINDOW":
+        return
+    if context.area is None or context.area.type != "VIEW_3D":
+        return
+    display = text + ("|" if dyn_typed else "")
+    font_id = 0
+    blf.size(font_id, 14)
+    try:
+        tw, th = blf.dimensions(font_id, display)
+    except Exception:
+        tw, th = 8.0 * len(display), 14.0
+    pad_x, pad_y = 8.0, 5.0
+    width = max(72.0, tw + pad_x * 2.0)
+    height = max(22.0, th + pad_y * 2.0)
+    x = max(8.0, min(dyn_pos[0], region.width - width - 8.0))
+    y = max(8.0, min(dyn_pos[1], region.height - height - 8.0))
+    shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+    gpu.state.blend_set("ALPHA")
+    shader.bind()
+    shader.uniform_float("color", (1.0, 1.0, 1.0, 0.96))
+    batch_for_shader(
+        shader,
+        "TRI_FAN",
+        {"pos": ((x, y), (x + width, y), (x + width, y + height), (x, y + height))},
+    ).draw(shader)
+    shader.uniform_float("color", (0.12, 0.55, 0.28, 1.0))
+    batch_for_shader(
+        shader,
+        "TRI_FAN",
+        {"pos": ((x, y), (x + width, y), (x + width, y + 2.0), (x, y + 2.0))},
+    ).draw(shader)
+    gpu.state.blend_set("NONE")
+    blf.color(font_id, 0.10, 0.14, 0.20, 1.0)
+    blf.position(font_id, x + pad_x, y + pad_y, 0)
+    blf.draw(font_id, display[:64])
+
+
 def _draw_snap_label():
-    """POST_PIXEL: SketchUp-style snap tip next to the inferred point."""
+    """POST_PIXEL: cursor dimension field, then the snap tip."""
+    _draw_dyn_input()
     if not preview_label:
         return
     try:
@@ -261,8 +323,22 @@ def _status(context, text):
     _redraw(context)
 
 
-def _measure(context, text):
-    _prop(context.scene, "oform_measure", text)
+def _measure(context, text, typed=False):
+    """Update the measurements readout.
+
+    ``typed=True`` locks the cursor field to what the user is entering.
+    Live rubber-band updates keep showing that text until the entry is cleared.
+    """
+    global dyn_live, dyn_typed
+    value = text or ""
+    if typed:
+        dyn_typed = value
+    else:
+        dyn_live = value
+        if not value.strip():
+            dyn_typed = ""
+    shown = dyn_typed if dyn_typed else value
+    _prop(context.scene, "oform_measure", shown)
     _redraw(context)
 
 
@@ -402,6 +478,7 @@ class _Tool:
                 x, y = event.mouse_region_x, event.mouse_region_y
                 if x < 0 or y < 0 or x >= region.width or y >= region.height:
                     return {"PASS_THROUGH"}
+                set_dyn_cursor(x, y)
         # Orbit, pan, and zoom stay on the middle mouse and the wheel.
         # Ctrl+Z / Ctrl+S stay undo and save. The modal must not swallow them.
         if event.type in {
@@ -485,13 +562,13 @@ class _Tool:
                 return {"RUNNING_MODAL"}
         if event.value == "PRESS" and event.type == "BACK_SPACE":
             self._buf = self._buf[:-1]
-            _measure(context, self._buf)
+            _measure(context, self._buf, typed=True)
             return {"RUNNING_MODAL"}
         if event.value == "PRESS" and event.type in {"DEL", "DELETE"}:
             # While typing a length, Del edits the buffer; otherwise delete selection.
             if self._buf:
                 self._buf = self._buf[:-1]
-                _measure(context, self._buf)
+                _measure(context, self._buf, typed=True)
                 return {"RUNNING_MODAL"}
             had_draw = bool(getattr(self, "_points", None)) or self._anchor is not None
             if had_draw:
@@ -531,7 +608,7 @@ class _Tool:
         # VCB: digits, units (' " mm m cm ft in), array suffixes x * /, segments s.
         if event.value == "PRESS" and event.unicode and event.unicode in units.VCB_CHARS:
             self._buf += event.unicode
-            _measure(context, self._buf)
+            _measure(context, self._buf, typed=True)
             return {"RUNNING_MODAL"}
         if event.value == "PRESS" and event.type in {"RET", "NUMPAD_ENTER"}:
             token = poweruser.parse_array_token(self._buf)

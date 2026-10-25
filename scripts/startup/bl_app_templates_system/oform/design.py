@@ -31,15 +31,18 @@ SPACE_MD = 8
 SPACE_LG = 12
 SPACE_XL = 16
 
-MIN_TARGET = 32
-CONTROL_HEIGHT = 32
+# O-Draft Density.cs / ControlTokens: hit 36, icon button 24, pane 260.
+# The drawing tool strip overrides that: BuildTools uses a 32×32 button,
+# SpaceSm (4) between buttons, PaddingSm (4) around the column.
+MIN_TARGET = 36
+CONTROL_HEIGHT = 36
 ICON_BUTTON = 32
-ICON_SIZE = 20
+ICON_SIZE = 24
 SPLITTER = 8
 SIDE_PANEL_DIP = 280
 SIDE_PANEL_MIN_DIP = 180
 SIDE_PANEL_MAX_DIP = 640
-TOOL_STRIP_DIP = 40  # 32 button + padding (WinUI strip column)
+TOOL_STRIP_DIP = 40  # 32 button + 4px padding each side
 ASK_BAR_MAX_DIP = 600
 ASK_BAR_HEIGHT = 36
 CORNER_CHROME = 3
@@ -69,7 +72,8 @@ TYPE_UI = "Segoe UI"
 TYPE_MONO = "Consolas"
 
 # Width heuristics for dual PROPERTIES panes (px).
-TOOL_STRIP_MAX_W = 72
+# Strip stays a 32px button column; wider than this is rebuilt.
+TOOL_STRIP_MAX_W = 52
 SIDE_PANEL_MIN_W = 120
 
 
@@ -122,27 +126,33 @@ def tokens(dark: bool) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Tool strip — O-Draft ToolCatalog mapped to O-Form operators
-# (WinUI: line, pline, circle, arc, rectang, move, copy, rotate, offset,
-#  trim, erase, dimlinear, text, hatch — plus Select / Push-Pull for 3D.)
+# Tool strip — O-Draft ToolCatalog order (MainWindow.ToolCatalog).
+# Draw, then Modify, then annotate. None is the group break.
+# Select and Push/Pull are the 3D tools O-Draft's 2D catalog does not have.
+# Text has no O-Form command, so it is omitted (same as a missing catalog id).
 # ---------------------------------------------------------------------------
 
 TOOL_STRIP = (
     ("oform.tool_select", "Select"),
+    None,
     ("oform.tool_line", "Line"),
+    ("oform.tool_freehand", "Polyline"),
     ("oform.tool_circle", "Circle"),
     ("oform.tool_arc", "Arc"),
     ("oform.tool_rectangle", "Rectangle"),
     None,
     ("oform.tool_move", "Move"),
+    ("oform.copy_selection", "Copy"),
     ("oform.tool_rotate", "Rotate"),
     ("oform.tool_offset", "Offset"),
     ("oform.tool_push_pull", "Push/Pull"),
     ("oform.boolean_trim", "Trim"),
     ("oform.tool_eraser", "Eraser"),
     None,
-    ("oform.tool_tape", "Measure"),
+    ("oform.tool_tape", "Dimension"),
     ("oform.tool_paint", "Paint"),
+    None,
+    ("oform.preferences_hint", "Customize"),
 )
 
 # BIM toolbar — classify / storey / suite sync (same 32 DIP targets as TOOL_STRIP).
@@ -170,10 +180,9 @@ def shell_enabled() -> bool:
 
 
 def left_stack_ratio(window_width: int) -> float:
-    """Fraction of window for tool strip + side panel (~320 DIP)."""
-    total = float(TOOL_STRIP_DIP + SIDE_PANEL_DIP)
+    """Fraction of window for the left side panel. Tools sit in the top bar."""
     w = max(int(window_width), 800)
-    return min(LEFT_STACK_MAX_RATIO, max(0.16, total / w))
+    return min(LEFT_STACK_MAX_RATIO, max(0.14, float(SIDE_PANEL_DIP) / w))
 
 
 def tool_strip_of_stack() -> float:

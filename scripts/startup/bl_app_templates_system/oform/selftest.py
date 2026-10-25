@@ -179,7 +179,7 @@ def _run(obj):
         _fail("undo did not restore z=0: " + str(heights))
 
     # Lone rectangle → Push/Pull must produce a closed solid (bottom + sides + top).
-    import solids as solids_mod
+    import bmesh
 
     result = bpy.ops.oform.rectangle(
         True,
@@ -193,8 +193,19 @@ def _run(obj):
     if "FINISHED" not in result:
         _fail("solid push_pull returned " + str(set(result)))
     bpy.ops.object.mode_set(mode="OBJECT")
-    if not solids_mod.object_is_solid(obj):
+    # The ground sheet stays in the same mesh; the new prism must be closed on its own.
+    box = bmesh.new()
+    box.from_mesh(obj.data)
+
+    def _in_prism(vert):
+        return 9.5 < vert.co.x < 12.5 and 9.5 < vert.co.y < 11.5
+
+    prism_edges = [edge for edge in box.edges if any(_in_prism(vert) for vert in edge.verts)]
+    if not prism_edges or any(len(edge.link_faces) != 2 for edge in prism_edges):
         _fail("push/pull of a lone face did not create a closed solid")
+    if not any(vert.co.z > 1.5 and _in_prism(vert) for vert in box.verts):
+        _fail("push/pull of a lone face did not create a closed solid")
+    box.free()
     bpy.ops.object.mode_set(mode="EDIT")
 
     # SketchUp-style polygon action (regular hex).
@@ -397,6 +408,112 @@ def _run_bim():
             _fail("take-off header missing or wrong format")
 
 
+def _run_wall_width():
+    """Standard wall widths and cut faces without hard triangulation."""
+    import bmesh
+
+    import bpy
+    import geom
+    from bim import thickness
+    from mathutils import Vector
+
+    near = thickness.nearest_standard(0.12)
+    if near[0] != "4.5" or not near[2]:
+        _fail("0.12 m should offer 4.5in, got " + str(near))
+    far = thickness.nearest_standard(0.60)
+    if far[2]:
+        _fail("0.60 m must stay outside the snap band")
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=(12.0, 0.0, 0.0))
+    wall = bpy.context.view_layer.objects.active
+    wall.scale = (3.0, 0.12, 2.4)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    bpy.context.view_layer.update()
+    info = thickness.inspect(wall)
+    if info["corner"] or info["axis"] != "Y" or not info["in_band"]:
+        _fail("straight wall inspect failed: " + str(info))
+    thickness.apply_mode(wall, "SNAP45")
+    bpy.context.view_layer.update()
+    width = thickness.inspect(wall)["width"]
+    if abs(width - thickness.WIDTH_4_5) > 0.005:
+        _fail("snapped width " + str(width))
+
+    mesh = bpy.data.meshes.new("LWall")
+    arm_x = bmesh.new()
+    bmesh.ops.create_cube(arm_x, size=1.0)
+    for vert in arm_x.verts:
+        vert.co.x = (vert.co.x + 0.5) * 2.0
+        vert.co.y = (vert.co.y + 0.5) * 0.11
+        vert.co.z = (vert.co.z + 0.5) * 2.0
+    arm_y = bmesh.new()
+    bmesh.ops.create_cube(arm_y, size=1.0)
+    for vert in arm_y.verts:
+        vert.co.x = (vert.co.x + 0.5) * 0.11
+        vert.co.y = (vert.co.y + 0.5) * 2.0
+        vert.co.z = (vert.co.z + 0.5) * 2.0
+    arm_x.to_mesh(mesh)
+    tmp = bpy.data.meshes.new("LArm")
+    arm_y.to_mesh(tmp)
+    arm_x.from_mesh(tmp)
+    arm_x.to_mesh(mesh)
+    arm_x.free()
+    arm_y.free()
+    corner = bpy.data.objects.new("LWall", mesh)
+    bpy.context.scene.collection.objects.link(corner)
+    if not thickness.is_corner(corner):
+        _fail("L wall should be detected as a corner")
+
+    cut = bmesh.new()
+    face = geom.add_polygon(
+        cut,
+        [
+            Vector((0, 0, 0)),
+            Vector((4, 0, 0)),
+            Vector((4, 0, 3)),
+            Vector((0, 0, 3)),
+        ],
+    )
+    geom.push_pull(cut, face, -0.2)
+    front = None
+    for item in cut.faces:
+        center = item.calc_center_median()
+        if abs(center.y) < 1e-4 and abs(item.normal.y) > 0.9:
+            front = item
+            break
+    if front is None:
+        _fail("wall front face missing")
+        return
+    win = geom.add_polygon(
+        cut,
+        [
+            Vector((0.5, 0, 0.8)),
+            Vector((1.5, 0, 0.8)),
+            Vector((1.5, 0, 2.0)),
+            Vector((0.5, 0, 2.0)),
+        ],
+    )
+    geom.push_pull(cut, win, -0.25)
+    hard = 0
+    for edge in cut.edges:
+        if not edge.is_valid or len(edge.link_faces) != 2:
+            continue
+        n0 = edge.link_faces[0].normal
+        n1 = edge.link_faces[1].normal
+        if n0.length < 1e-8 or n1.length < 1e-8:
+            continue
+        if n0.normalized().dot(n1.normalized()) < 0.999:
+            continue
+        if not edge.hide:
+            hard += 1
+    if hard:
+        _fail("coplanar cut edges still visible: " + str(hard))
+    open_e = sum(1 for edge in cut.edges if len(edge.link_faces) != 2)
+    if open_e:
+        _fail("through-cut left open edges: " + str(open_e))
+    cut.free()
+
+
 def main():
     import bpy
 
@@ -459,11 +576,13 @@ def main():
         _prepare()
         _run(bpy.data.objects["Model"])
         _run_bim()
+        _run_wall_width()
     else:
         with override:
             obj = _prepare()
             _run(obj)
             _run_bim()
+            _run_wall_width()
     print("OFORM_SELFTEST_OK", flush=True)
     raise SystemExit(0)
 

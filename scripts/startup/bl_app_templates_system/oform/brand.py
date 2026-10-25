@@ -375,6 +375,54 @@ def palette(dark):
     }
 
 
+def _flat_widget(widget, inner, text, inner_sel, outline, *, fill, roundness):
+    """One widget colour slot. ``fill`` draws a box; otherwise only text shows until hover."""
+    _paint(widget, "inner", (*_unit(inner), 1.0 if fill else 0.0))
+    _paint(widget, "text", _unit(text))
+    _paint(widget, "inner_sel", (*_unit(inner_sel), 1.0))
+    _paint(widget, "text_sel", _unit(text))
+    _paint(widget, "outline", (*_unit(outline), 1.0 if fill else 0.0))
+    _paint(widget, "outline_sel", (*_unit(outline), 0.0))
+    _paint(widget, "item", (*_unit(inner_sel), 1.0))
+    if hasattr(widget, "show_shaded"):
+        widget.show_shaded = False
+    if hasattr(widget, "shadetop"):
+        widget.shadetop = 0
+        widget.shadedown = 0
+    if hasattr(widget, "roundness"):
+        widget.roundness = roundness
+
+
+def _style_menus(ui, colors, dark):
+    """Dropdowns are one panel with flat rows. Idle rows have no button fill or border."""
+    hover = (58, 58, 58) if dark else (214, 222, 234)
+    panel = colors["surface"]
+    ink = colors["ink"]
+    edge = colors["edge"]
+    slots = (
+        # Popup panel: one surface, one border.
+        ("wcol_menu_back", panel, True, 0.12),
+        ("wcol_tooltip", panel, True, 0.12),
+        # Rows stay empty until hover. Hover blends from this fill, so it is the highlight.
+        ("wcol_menu_item", hover, False, 0.15),
+        # Menu-bar titles are text. Hover uses inner_sel.
+        ("wcol_pulldown", panel, False, 0.2),
+    )
+    for name, inner, fill, roundness in slots:
+        widget = getattr(ui, name, None)
+        if widget is None or not hasattr(widget, "inner"):
+            continue
+        _flat_widget(
+            widget,
+            inner,
+            ink,
+            hover,
+            edge,
+            fill=fill,
+            roundness=roundness,
+        )
+
+
 def apply_theme(context, dark=None):
     """O-Draft-aligned shell: graphite or off-white chrome, black/white canvas."""
     if dark is None:
@@ -386,8 +434,7 @@ def apply_theme(context, dark=None):
     names = (
         "wcol_regular", "wcol_tool", "wcol_toolbar_item", "wcol_radio",
         "wcol_text", "wcol_option", "wcol_toggle", "wcol_num", "wcol_numslider",
-        "wcol_box", "wcol_menu", "wcol_pulldown", "wcol_menu_back",
-        "wcol_pie_menu", "wcol_tooltip", "wcol_menu_item", "wcol_scroll",
+        "wcol_box", "wcol_menu", "wcol_pie_menu", "wcol_scroll",
         "wcol_progress", "wcol_list_item", "wcol_state",
     )
     for name in names:
@@ -402,6 +449,7 @@ def apply_theme(context, dark=None):
             text_sel=colors["ink"] if dark else INK,
             outline=colors["edge"],
         )
+    _style_menus(ui, colors, dark)
     _paint(ui, "editor_border", _unit(colors["edge"]))
     _paint(ui, "editor_outline", (*_unit(colors["edge"]), 1.0))
     _paint(ui, "editor_outline_active", (*_unit(colors["accent"]), 1.0))

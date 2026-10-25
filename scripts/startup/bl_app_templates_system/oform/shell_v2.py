@@ -357,7 +357,7 @@ def draw_properties_header(self, context):
 
 
 def draw_status(self, context):
-    """Command · unit chips · view · selection · VCB (O-Draft command bar)."""
+    """Command · unit dropdown · view · selection · VCB (O-Draft command bar)."""
     import units as units_mod
 
     layout = self.layout
@@ -368,7 +368,6 @@ def draw_status(self, context):
     layout.label(text=status or "Ready")
     layout.separator_spacer()
 
-    # Unit chips — same pattern as O-Draft bottom bar.
     units_mod.draw_status_chips(layout, scene)
 
     # Perspective / parallel

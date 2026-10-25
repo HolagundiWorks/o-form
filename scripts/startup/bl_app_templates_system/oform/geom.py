@@ -419,23 +419,72 @@ def _project_to_plane(co, origin, normal):
     return p - n * (p - o).dot(n)
 
 
+def _edge_is_coplanar(edge):
+    if edge is None or not edge.is_valid or len(edge.link_faces) != 2:
+        return False
+    n0 = edge.link_faces[0].normal
+    n1 = edge.link_faces[1].normal
+    if n0.length < 1e-12 or n1.length < 1e-12:
+        return False
+    return n0.normalized().dot(n1.normalized()) >= 0.999
+
+
+def _cleanup_coplanar(bm, faces, keep_edges):
+    """Dissolve flat interior edges so a cut reads as a surface, not a triangle fan.
+
+    Edges on ``keep_edges`` (outer rim and opening loops) stay hard.
+    Leftover diagonals are softened and hidden.
+    """
+    keep = {edge for edge in keep_edges if edge is not None and getattr(edge, "is_valid", False)}
+    region = set()
+    for face in list(faces or []):
+        if face is None or not getattr(face, "is_valid", False):
+            continue
+        region.update(vert for vert in face.verts if vert.is_valid)
+
+    def _in_region(edge):
+        if not region:
+            return True
+        return any(vert in region for vert in edge.verts)
+
+    candidates = [
+        edge
+        for edge in bm.edges
+        if edge.is_valid and edge not in keep and _in_region(edge) and _edge_is_coplanar(edge)
+    ]
+    if candidates:
+        try:
+            bmesh.ops.dissolve_edges(
+                bm, edges=candidates, use_verts=False, use_face_split=False
+            )
+        except (ValueError, RuntimeError, TypeError):
+            pass
+    for edge in list(bm.edges):
+        if not edge.is_valid or edge in keep or not _in_region(edge):
+            continue
+        if not _edge_is_coplanar(edge):
+            continue
+        edge.smooth = True
+        edge.hide = True
+
+
 def _soften_bridge_edges(bm, rim_faces, outer_verts, inner_verts):
     """Hide rim construction edges (SketchUp soft) — keep outer + inner loops hard."""
     keep = set()
     for loop in (outer_verts, inner_verts):
         count = len(loop)
         for i in range(count):
-            edge = bm.edges.get((loop[i], loop[(i + 1) % count]))
+            if i >= len(loop):
+                break
+            nxt = loop[(i + 1) % count]
+            if loop[i] is None or nxt is None:
+                continue
+            if not getattr(loop[i], "is_valid", False) or not getattr(nxt, "is_valid", False):
+                continue
+            edge = bm.edges.get((loop[i], nxt))
             if edge is not None:
                 keep.add(edge)
-    for face in rim_faces:
-        if face is None or not face.is_valid:
-            continue
-        for edge in face.edges:
-            if edge in keep:
-                continue
-            edge.smooth = True
-            edge.hide = True
+    _cleanup_coplanar(bm, rim_faces, keep)
 
 
 def _annular_rim_faces(bm, outer_verts, outer_2d, inner_verts, inner_2d, normal):
@@ -1139,7 +1188,7 @@ def _cut_hole_on_plane(bm, hole_verts, plane_normal, plane_origin, skip_faces=No
         except (ValueError, RuntimeError):
             filled = {}
         doomed = []
-        made = 0
+        made_faces = []
         for ele in filled.get("geom", []):
             if not isinstance(ele, bmesh.types.BMFace) or not ele.is_valid:
                 continue
@@ -1152,7 +1201,7 @@ def _cut_hole_on_plane(bm, hole_verts, plane_normal, plane_origin, skip_faces=No
                 continue
             if ele.normal.dot(normal) < 0.0:
                 ele.normal_flip()
-            made += 1
+            made_faces.append(ele)
         if doomed:
             bmesh.ops.delete(bm, geom=doomed, context="FACES")
         loose = [
@@ -1162,8 +1211,10 @@ def _cut_hole_on_plane(bm, hole_verts, plane_normal, plane_origin, skip_faces=No
         ]
         if loose:
             bmesh.ops.delete(bm, geom=loose, context="EDGES")
+        keep = [edge for edge in fill_edges if edge is not None and edge.is_valid]
+        _cleanup_coplanar(bm, made_faces, keep)
         _ensure(bm)
-        return made > 0
+        return len(made_faces) > 0
 
     def _loop_edges(verts):
         edges = []

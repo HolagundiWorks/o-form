@@ -223,25 +223,8 @@ def system_label(scene) -> str:
     return "Metric"
 
 
-# Short labels for O-Draft-style status-bar chips.
-STATUS_CHIPS = (
-    ("m", "m"),
-    ("mm", "mm"),
-    ("cm", "cm"),
-    ("ft", "'"),
-    ("in", '"'),
-)
-
-
 def draw_status_chips(layout, scene):
-    """Row of depressible unit chips for the bottom command bar."""
+    """Unit dropdown on the bottom command bar. The menu lists every length unit."""
     current = current_unit(scene)
-    row = layout.row(align=True)
-    row.scale_y = 0.95
-    for key, short in STATUS_CHIPS:
-        op = row.operator(
-            "oform.set_units",
-            text=short,
-            depress=key == current,
-        )
-        op.unit = key
+    label = _UNIT_LABEL.get(current, "Meters (m)")
+    layout.menu("OFORM_MT_units", text=label)
