@@ -1,12 +1,14 @@
-# Regenerates O-Form suite mark assets (pastel green plate, ink glyph).
+# Regenerates O-Form suite mark assets (Grove tile, white strokes). The shipped files are the suite artwork in o-ui/brand/form;
+# this draws the same mark when that repository is not at hand.
 # Same geometry as hcw-ui tools/Brand: C + lower arc + centre ring in a 194 box.
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 
 $OutDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Accent = [System.Drawing.ColorTranslator]::FromHtml("#C6E6D3")
-$Ink = [System.Drawing.ColorTranslator]::FromHtml("#1A1A1A")
-$InkSoft = [System.Drawing.ColorTranslator]::FromHtml("#5C5C5C")
+$Accent = [System.Drawing.ColorTranslator]::FromHtml("#166040")
+$Ink = [System.Drawing.ColorTranslator]::FromHtml("#FFFFFF")      # the mark's strokes
+$Text = [System.Drawing.ColorTranslator]::FromHtml("#102C80")     # Midnight, the suite ink
+$InkSoft = [System.Drawing.ColorTranslator]::FromHtml("#3E56A0")  # Midnight soft
 $White = [System.Drawing.Color]::White
 
 function New-Bitmap([int]$w, [int]$h) {
@@ -47,7 +49,7 @@ function Draw-Mark(
     $g.TranslateTransform(-31, -31)
     $brush = New-Object System.Drawing.SolidBrush $Accent
     if ($full) {
-        $path = Get-Rounded 31 31 194 194 34
+        $path = Get-Rounded 31 31 194 194 42
         $g.FillPath($brush, $path)
         $path.Dispose()
     } else {
@@ -83,12 +85,12 @@ function Save-Splash([string]$path) {
     $g.Clear($White)
     $markSize = 280
     Draw-Mark $g 48 (($h - $markSize) / 2) $markSize $true
-    $title = New-Object System.Drawing.Font "Segoe UI Semibold", 64, ([System.Drawing.FontStyle]::Regular), ([System.Drawing.GraphicsUnit]::Pixel)
+    $title = New-Object System.Drawing.Font "Apfel Grotezk", 64, ([System.Drawing.FontStyle]::Regular), ([System.Drawing.GraphicsUnit]::Pixel)
     $sub = New-Object System.Drawing.Font "Segoe UI", 28, ([System.Drawing.FontStyle]::Regular), ([System.Drawing.GraphicsUnit]::Pixel)
-    $inkBrush = New-Object System.Drawing.SolidBrush $Ink
+    $inkBrush = New-Object System.Drawing.SolidBrush $Text
     $softBrush = New-Object System.Drawing.SolidBrush $InkSoft
     $g.DrawString("O-Form", $title, $inkBrush, 360, 140)
-    $g.DrawString("Modeling", $sub, $softBrush, 364, 220)
+    $g.DrawString("3D Modelling", $sub, $softBrush, 364, 220)
     $title.Dispose(); $sub.Dispose(); $inkBrush.Dispose(); $softBrush.Dispose()
     $g.Dispose()
     $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
@@ -142,8 +144,8 @@ $svg = @"
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 194 194" width="194" height="194">
   <title>O-Form</title>
-  <rect width="194" height="194" rx="34" ry="34" fill="#C6E6D3"/>
-  <g fill="none" stroke="#1A1A1A">
+  <rect width="194" height="194" rx="42" ry="42" fill="#166040"/>
+  <g fill="none" stroke="#FFFFFF">
     <path d="M107 27A69 69 0 0 0 107 165" stroke-width="18"/>
     <path d="M57 96A50 50 0 0 0 157 96" stroke-width="12"/>
     <circle cx="107" cy="96" r="18.5" stroke-width="5"/>

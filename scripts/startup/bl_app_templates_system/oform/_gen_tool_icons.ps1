@@ -1,22 +1,29 @@
-# SketchUp Large Tool Set–style glyphs for O-Form (simple flat icons).
+# O-Form tool glyphs: 20px art, 1.5px stroke, exported at 4x so the stroke stays sharp.
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 
 $Out = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "icons"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
-$Ink = [System.Drawing.ColorTranslator]::FromHtml("#1A1A1A")
+$Logical = 20.0
+$Scale = 4.0
+$Size = [int]($Logical * $Scale)
+$Stroke = [single](1.5 * $Scale)
+
+$Ink = [System.Drawing.ColorTranslator]::FromHtml("#102C80")   # Midnight, the suite ink
 $Red = [System.Drawing.ColorTranslator]::FromHtml("#E03C31")
 $Yellow = [System.Drawing.ColorTranslator]::FromHtml("#E8B923")
-$Grey = [System.Drawing.ColorTranslator]::FromHtml("#8A8A8A")
+$Grey = [System.Drawing.ColorTranslator]::FromHtml("#546B88")
 $Tan = [System.Drawing.ColorTranslator]::FromHtml("#C4A574")
 $Pink = [System.Drawing.ColorTranslator]::FromHtml("#E89AA8")
-$Size = 64
+$Green = [System.Drawing.ColorTranslator]::FromHtml("#166040")   # Grove
+$Blue = [System.Drawing.ColorTranslator]::FromHtml("#3B7DD8")
 
 function New-Canvas {
     $bmp = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.Clear([System.Drawing.Color]::Transparent)
     return @{ B = $bmp; G = $g }
 }
@@ -30,64 +37,56 @@ function Save-Icon($name, $draw) {
     $c.B.Dispose()
 }
 
-function Pen($color, $w = 3.0) {
-    $p = New-Object System.Drawing.Pen $color, $w
+function Pen($color) {
+    $p = New-Object System.Drawing.Pen $color, $Stroke
     $p.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
     $p.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
     $p.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
     return $p
 }
 
-# Select — black arrow pointer
-Save-Icon "select" {
-    param($g)
-    $brush = New-Object System.Drawing.SolidBrush $Ink
-    $pts = @(
-        (New-Object System.Drawing.PointF 16,12),
-        (New-Object System.Drawing.PointF 16,48),
-        (New-Object System.Drawing.PointF 26,38),
-        (New-Object System.Drawing.PointF 36,52),
-        (New-Object System.Drawing.PointF 42,48),
-        (New-Object System.Drawing.PointF 32,34),
-        (New-Object System.Drawing.PointF 44,34)
-    )
-    $g.FillPolygon($brush, $pts)
-    $brush.Dispose()
+function Pt($x, $y) {
+    return New-Object System.Drawing.PointF ([single]($x * $Scale)), ([single]($y * $Scale))
 }
 
-# Make Component — red-edged cube-ish box
+function Poly($pairs) {
+    return @($pairs | ForEach-Object { Pt $_[0] $_[1] })
+}
+
+# Select — stroked pointer
+Save-Icon "select" {
+    param($g)
+    $pen = Pen $Ink
+    $g.DrawPolygon($pen, [System.Drawing.PointF[]](Poly @(
+        @(4.5,3.2), @(4.5,16.2), @(8.2,12.6), @(11.6,17.2), @(13.6,15.8), @(10.2,11.2), @(14.6,11.2)
+    )))
+    $pen.Dispose()
+}
+
+# Make Component
 Save-Icon "component" {
     param($g)
-    $pen = Pen $Red 3
-    $g.DrawRectangle($pen, 18, 22, 28, 24)
-    $g.DrawLine($pen, 18, 22, 28, 14)
-    $g.DrawLine($pen, 46, 22, 56, 14)
-    $g.DrawLine($pen, 28, 14, 56, 14)
-    $g.DrawLine($pen, 56, 14, 56, 38)
-    $g.DrawLine($pen, 46, 46, 56, 38)
+    $pen = Pen $Red
+    $g.DrawPolygon($pen, [System.Drawing.PointF[]](Poly @(
+        @(5,8), @(9,5.5), @(15,5.5), @(15,12.5), @(11,15), @(5,15)
+    )))
+    $g.DrawLine($pen, (Pt 5 8), (Pt 11 8))
+    $g.DrawLine($pen, (Pt 11 8), (Pt 15 5.5))
+    $g.DrawLine($pen, (Pt 11 8), (Pt 11 15))
     $pen.Dispose()
 }
 
 # Paint bucket
 Save-Icon "paint" {
     param($g)
-    $pen = Pen $Ink 2.5
+    $pen = Pen $Ink
     $fill = New-Object System.Drawing.SolidBrush $Yellow
-    $g.FillPolygon($fill, @(
-        (New-Object System.Drawing.PointF 22,28),
-        (New-Object System.Drawing.PointF 42,28),
-        (New-Object System.Drawing.PointF 46,48),
-        (New-Object System.Drawing.PointF 18,48)
-    ))
-    $g.DrawPolygon($pen, @(
-        (New-Object System.Drawing.PointF 22,28),
-        (New-Object System.Drawing.PointF 42,28),
-        (New-Object System.Drawing.PointF 46,48),
-        (New-Object System.Drawing.PointF 18,48)
-    ))
-    $g.DrawArc($pen, 24, 14, 16, 16, 200, 140)
+    $pts = [System.Drawing.PointF[]](Poly @(@(6.5,8.5), @(12.5,8.5), @(14,15.5), @(5,15.5)))
+    $g.FillPolygon($fill, $pts)
+    $g.DrawPolygon($pen, $pts)
+    $g.DrawArc($pen, (4.5*$Scale), (3.2*$Scale), (8*$Scale), (6*$Scale), 200, 140)
     $spill = New-Object System.Drawing.SolidBrush $Yellow
-    $g.FillEllipse($spill, 40, 44, 14, 10)
+    $g.FillEllipse($spill, (12.2*$Scale), (13.6*$Scale), (4.2*$Scale), (3*$Scale))
     $pen.Dispose(); $fill.Dispose(); $spill.Dispose()
 }
 
@@ -95,259 +94,266 @@ Save-Icon "paint" {
 Save-Icon "eraser" {
     param($g)
     $brush = New-Object System.Drawing.SolidBrush $Pink
-    $pen = Pen $Ink 2
-    $g.TranslateTransform(32, 32)
+    $pen = Pen $Ink
+    $g.TranslateTransform((10*$Scale), (10*$Scale))
     $g.RotateTransform(-35)
-    $g.FillRectangle($brush, -14, -8, 28, 16)
-    $g.DrawRectangle($pen, -14, -8, 28, 16)
-    $g.DrawLine($pen, 0, -8, 0, 8)
+    $g.FillRectangle($brush, (-5*$Scale), (-2.4*$Scale), (10*$Scale), (4.8*$Scale))
+    $g.DrawRectangle($pen, (-5*$Scale), (-2.4*$Scale), (10*$Scale), (4.8*$Scale))
+    $g.DrawLine($pen, 0, (-2.4*$Scale), 0, (2.4*$Scale))
     $g.ResetTransform()
     $brush.Dispose(); $pen.Dispose()
 }
 
-# Line — red pencil
+# Line
 Save-Icon "line" {
     param($g)
-    $pen = Pen $Red 3.5
-    $g.DrawLine($pen, 14, 48, 50, 14)
-    $tip = New-Object System.Drawing.SolidBrush $Ink
-    $g.FillPolygon($tip, @(
-        (New-Object System.Drawing.PointF 50,14),
-        (New-Object System.Drawing.PointF 44,16),
-        (New-Object System.Drawing.PointF 48,22)
-    ))
-    $pen.Dispose(); $tip.Dispose()
+    $pen = Pen $Red
+    $g.DrawLine($pen, (Pt 4.2 15.6), (Pt 15.2 4.4))
+    $pen.Dispose()
 }
 
 # Freehand
 Save-Icon "freehand" {
     param($g)
-    $pen = Pen $Red 3
-    $g.DrawBezier($pen, 12, 40, 22, 12, 36, 52, 52, 20)
+    $pen = Pen $Red
+    $g.DrawBezier($pen, (Pt 3.5 13), (Pt 7 3.5), (Pt 12 16.5), (Pt 16.5 6))
     $pen.Dispose()
 }
 
 # Rectangle
 Save-Icon "rectangle" {
     param($g)
-    $pen = Pen $Grey 2.5
-    $g.DrawRectangle($pen, 14, 18, 36, 28)
-    $diag = Pen $Red 2.5
-    $g.DrawLine($diag, 14, 46, 50, 18)
+    $pen = Pen $Grey
+    $g.DrawRectangle($pen, (4*$Scale), (5*$Scale), (12*$Scale), (10*$Scale))
+    $diag = Pen $Red
+    $g.DrawLine($diag, (Pt 4 15), (Pt 16 5))
     $pen.Dispose(); $diag.Dispose()
 }
 
 # Circle
 Save-Icon "circle" {
     param($g)
-    $pen = Pen $Grey 2.5
-    $g.DrawEllipse($pen, 14, 14, 36, 36)
-    $r = Pen $Red 2.5
-    $g.DrawLine($r, 32, 32, 50, 32)
+    $pen = Pen $Grey
+    $g.DrawEllipse($pen, (4*$Scale), (4*$Scale), (12*$Scale), (12*$Scale))
+    $r = Pen $Red
+    $g.DrawLine($r, (Pt 10 10), (Pt 16 10))
     $pen.Dispose(); $r.Dispose()
 }
 
-# Polygon (hex)
+# Polygon
 Save-Icon "polygon" {
     param($g)
-    $pen = Pen $Grey 2.5
-    $cx=32; $cy=32; $rad=18
+    $pen = Pen $Grey
     $pts = 0..5 | ForEach-Object {
         $a = [math]::PI/6 + $_ * [math]::PI/3
-        New-Object System.Drawing.PointF ($cx + $rad*[math]::Cos($a)), ($cy + $rad*[math]::Sin($a))
+        Pt (10 + 6.2*[math]::Cos($a)) (10 + 6.2*[math]::Sin($a))
     }
     $g.DrawPolygon($pen, [System.Drawing.PointF[]]$pts)
-    $r = Pen $Red 2
-    $g.DrawLine($r, 32, 32, 48, 32)
+    $r = Pen $Red
+    $g.DrawLine($r, (Pt 10 10), (Pt 15.5 10))
     $pen.Dispose(); $r.Dispose()
 }
 
 # Arc
 Save-Icon "arc" {
     param($g)
-    $pen = Pen $Red 3
-    $g.DrawArc($pen, 12, 16, 40, 40, 200, 140)
+    $pen = Pen $Red
+    $g.DrawArc($pen, (3.5*$Scale), (4.5*$Scale), (13*$Scale), (13*$Scale), 200, 140)
     $pen.Dispose()
 }
 
 # Move
 Save-Icon "move" {
     param($g)
-    $pen = Pen $Red 2.5
-    $g.DrawLine($pen, 32, 12, 32, 52)
-    $g.DrawLine($pen, 12, 32, 52, 32)
+    $pen = Pen $Red
+    $g.DrawLine($pen, (Pt 10 3.2), (Pt 10 16.8))
+    $g.DrawLine($pen, (Pt 3.2 10), (Pt 16.8 10))
     foreach ($poly in @(
-        @((32,12),(28,20),(36,20)),
-        @((32,52),(28,44),(36,44)),
-        @((12,32),(20,28),(20,36)),
-        @((52,32),(44,28),(44,36))
+        @(@(10,3.2), @(8.2,5.6), @(11.8,5.6)),
+        @(@(10,16.8), @(8.2,14.4), @(11.8,14.4)),
+        @(@(3.2,10), @(5.6,8.2), @(5.6,11.8)),
+        @(@(16.8,10), @(14.4,8.2), @(14.4,11.8))
     )) {
-        $brush = New-Object System.Drawing.SolidBrush $Red
-        $g.FillPolygon($brush, @(
-            (New-Object System.Drawing.PointF $poly[0][0], $poly[0][1]),
-            (New-Object System.Drawing.PointF $poly[1][0], $poly[1][1]),
-            (New-Object System.Drawing.PointF $poly[2][0], $poly[2][1])
-        ))
-        $brush.Dispose()
+        $g.DrawPolygon($pen, [System.Drawing.PointF[]](Poly $poly))
     }
+    $pen.Dispose()
+}
+
+# Copy — two offset squares
+Save-Icon "copy" {
+    param($g)
+    $pen = Pen $Ink
+    $g.DrawRectangle($pen, (7*$Scale), (4*$Scale), (8.5*$Scale), (8.5*$Scale))
+    $g.DrawRectangle($pen, (4*$Scale), (7.5*$Scale), (8.5*$Scale), (8.5*$Scale))
     $pen.Dispose()
 }
 
 # Push/Pull
 Save-Icon "push_pull" {
     param($g)
-    $pen = Pen $Grey 2.5
-    $g.DrawRectangle($pen, 16, 28, 32, 20)
-    $g.DrawLine($pen, 16, 28, 24, 18)
-    $g.DrawLine($pen, 48, 28, 56, 18)
-    $g.DrawLine($pen, 24, 18, 56, 18)
-    $g.DrawLine($pen, 56, 18, 56, 38)
-    $g.DrawLine($pen, 48, 48, 56, 38)
-    $arrow = Pen $Red 3
-    $g.DrawLine($arrow, 32, 44, 32, 12)
-    $brush = New-Object System.Drawing.SolidBrush $Red
-    $g.FillPolygon($brush, @(
-        (New-Object System.Drawing.PointF 32,10),
-        (New-Object System.Drawing.PointF 26,20),
-        (New-Object System.Drawing.PointF 38,20)
-    ))
-    $pen.Dispose(); $arrow.Dispose(); $brush.Dispose()
+    $pen = Pen $Grey
+    $g.DrawPolygon($pen, [System.Drawing.PointF[]](Poly @(
+        @(4.5,9), @(7.5,6.5), @(15.5,6.5), @(15.5,13), @(12.5,15.5), @(4.5,15.5)
+    )))
+    $g.DrawLine($pen, (Pt 4.5 9), (Pt 12.5 9))
+    $g.DrawLine($pen, (Pt 12.5 9), (Pt 15.5 6.5))
+    $g.DrawLine($pen, (Pt 12.5 9), (Pt 12.5 15.5))
+    $arrow = Pen $Red
+    $g.DrawLine($arrow, (Pt 9 14.5), (Pt 9 3.4))
+    $g.DrawPolygon($arrow, [System.Drawing.PointF[]](Poly @(@(9,3.2), @(7.2,5.6), @(10.8,5.6))))
+    $pen.Dispose(); $arrow.Dispose()
+}
+
+# Trim — edge and a cutter
+Save-Icon "trim" {
+    param($g)
+    $pen = Pen $Grey
+    $g.DrawLine($pen, (Pt 4 15.5), (Pt 4 4.5))
+    $g.DrawLine($pen, (Pt 4 4.5), (Pt 15.5 4.5))
+    $cut = Pen $Red
+    $g.DrawLine($cut, (Pt 7.5 12.5), (Pt 15.5 4.5))
+    $pen.Dispose(); $cut.Dispose()
 }
 
 # Rotate
 Save-Icon "rotate" {
     param($g)
-    $pen = Pen $Red 3
-    $g.DrawArc($pen, 14, 14, 36, 36, 40, 260)
-    $brush = New-Object System.Drawing.SolidBrush $Red
-    $g.FillPolygon($brush, @(
-        (New-Object System.Drawing.PointF 44,14),
-        (New-Object System.Drawing.PointF 52,22),
-        (New-Object System.Drawing.PointF 40,24)
-    ))
-    $pen.Dispose(); $brush.Dispose()
+    $pen = Pen $Red
+    $g.DrawArc($pen, (4*$Scale), (4*$Scale), (12*$Scale), (12*$Scale), 40, 270)
+    $g.DrawPolygon($pen, [System.Drawing.PointF[]](Poly @(@(14.2,4.2), @(16.6,6.6), @(13.2,7.2))))
+    $pen.Dispose()
 }
 
 # Follow Me
 Save-Icon "follow_me" {
     param($g)
-    $pen = Pen $Grey 2.5
-    $g.DrawLines($pen, @(
-        (New-Object System.Drawing.PointF 14,44),
-        (New-Object System.Drawing.PointF 14,28),
-        (New-Object System.Drawing.PointF 30,28),
-        (New-Object System.Drawing.PointF 30,44)
-    ))
-    $path = Pen $Red 3
-    $g.DrawBezier($path, 30, 36, 40, 20, 48, 48, 54, 18)
+    $pen = Pen $Grey
+    $g.DrawLines($pen, [System.Drawing.PointF[]](Poly @(
+        @(4,14.5), @(4,8.5), @(9.5,8.5), @(9.5,14.5)
+    )))
+    $path = Pen $Red
+    $g.DrawBezier($path, (Pt 9.5 11.5), (Pt 12.5 5), (Pt 15 15), (Pt 17 6))
     $pen.Dispose(); $path.Dispose()
 }
 
 # Scale
 Save-Icon "scale" {
     param($g)
-    $pen = Pen $Grey 2.5
-    $g.DrawRectangle($pen, 16, 16, 28, 28)
-    $a = Pen $Red 2.5
-    $g.DrawLine($a, 44, 44, 54, 54)
-    $brush = New-Object System.Drawing.SolidBrush $Red
-    $g.FillRectangle($brush, 40, 40, 8, 8)
-    $g.FillRectangle($brush, 50, 50, 8, 8)
-    $pen.Dispose(); $a.Dispose(); $brush.Dispose()
+    $pen = Pen $Grey
+    $g.DrawRectangle($pen, (4*$Scale), (4*$Scale), (8.5*$Scale), (8.5*$Scale))
+    $a = Pen $Red
+    $g.DrawLine($a, (Pt 12.5 12.5), (Pt 16.5 16.5))
+    $g.DrawRectangle($a, (11.2*$Scale), (11.2*$Scale), (2.4*$Scale), (2.4*$Scale))
+    $g.DrawRectangle($a, (15*$Scale), (15*$Scale), (2.2*$Scale), (2.2*$Scale))
+    $pen.Dispose(); $a.Dispose()
 }
 
 # Offset
 Save-Icon "offset" {
     param($g)
-    $pen = Pen $Grey 2.5
-    $g.DrawRectangle($pen, 14, 14, 36, 36)
-    $g.DrawRectangle($pen, 22, 22, 20, 20)
-    $a = Pen $Red 2.5
-    $g.DrawLine($a, 32, 14, 32, 22)
+    $pen = Pen $Grey
+    $g.DrawRectangle($pen, (3.8*$Scale), (3.8*$Scale), (12.4*$Scale), (12.4*$Scale))
+    $g.DrawRectangle($pen, (7*$Scale), (7*$Scale), (6*$Scale), (6*$Scale))
+    $a = Pen $Red
+    $g.DrawLine($a, (Pt 10 3.8), (Pt 10 7))
     $pen.Dispose(); $a.Dispose()
 }
 
 # Tape
 Save-Icon "tape" {
     param($g)
-    $pen = Pen $Yellow 4
-    $g.DrawLine($pen, 12, 48, 52, 16)
-    $tick = Pen $Ink 2
-    $g.DrawLine($tick, 20, 42, 24, 38)
-    $g.DrawLine($tick, 30, 34, 34, 30)
-    $g.DrawLine($tick, 40, 26, 44, 22)
+    $pen = Pen $Yellow
+    $g.DrawLine($pen, (Pt 3.5 15.5), (Pt 16.2 4.2))
+    $tick = Pen $Ink
+    $g.DrawLine($tick, (Pt 6.2 13.2), (Pt 7.6 11.8))
+    $g.DrawLine($tick, (Pt 9.4 10.2), (Pt 10.8 8.8))
+    $g.DrawLine($tick, (Pt 12.6 7.2), (Pt 14 5.8))
     $pen.Dispose(); $tick.Dispose()
 }
 
 # Protractor
 Save-Icon "protractor" {
     param($g)
-    $pen = Pen $Yellow 3
-    $g.DrawArc($pen, 10, 18, 44, 44, 180, 180)
-    $g.DrawLine($pen, 10, 40, 54, 40)
-    $ink = Pen $Ink 2
-    $g.DrawLine($ink, 32, 40, 32, 22)
+    $pen = Pen $Yellow
+    $g.DrawArc($pen, (3*$Scale), (5*$Scale), (14*$Scale), (14*$Scale), 180, 180)
+    $g.DrawLine($pen, (Pt 3 12), (Pt 17 12))
+    $ink = Pen $Ink
+    $g.DrawLine($ink, (Pt 10 12), (Pt 10 6.2))
     $pen.Dispose(); $ink.Dispose()
 }
 
-# Back edges / axes-ish
+# Back edges
 Save-Icon "back_edges" {
     param($g)
-    $x = Pen ([System.Drawing.ColorTranslator]::FromHtml("#E03C31")) 3
-    $y = Pen ([System.Drawing.ColorTranslator]::FromHtml("#3FA36A")) 3
-    $z = Pen ([System.Drawing.ColorTranslator]::FromHtml("#3B7DD8")) 3
-    $g.DrawLine($x, 32, 40, 54, 40)
-    $g.DrawLine($y, 32, 40, 18, 52)
-    $g.DrawLine($z, 32, 40, 32, 12)
+    $x = Pen $Red
+    $y = Pen $Green
+    $z = Pen $Blue
+    $g.DrawLine($x, (Pt 10 12), (Pt 17 12))
+    $g.DrawLine($y, (Pt 10 12), (Pt 5.5 16.2))
+    $g.DrawLine($z, (Pt 10 12), (Pt 10 4))
     $x.Dispose(); $y.Dispose(); $z.Dispose()
 }
 
 # Orbit
 Save-Icon "orbit" {
     param($g)
-    $pen = Pen $Ink 2
-    $g.DrawEllipse($pen, 16, 16, 32, 32)
-    $a = Pen $Red 2.5
-    $g.DrawArc($a, 12, 20, 40, 28, 200, 140)
-    $b = Pen ([System.Drawing.ColorTranslator]::FromHtml("#3FA36A")) 2.5
-    $g.DrawArc($b, 20, 12, 28, 40, 110, 140)
+    $pen = Pen $Ink
+    $g.DrawEllipse($pen, (5*$Scale), (5*$Scale), (10*$Scale), (10*$Scale))
+    $a = Pen $Red
+    $g.DrawArc($a, (3.5*$Scale), (6.5*$Scale), (13*$Scale), (8*$Scale), 200, 140)
+    $b = Pen $Green
+    $g.DrawArc($b, (6.5*$Scale), (3.5*$Scale), (8*$Scale), (13*$Scale), 110, 140)
     $pen.Dispose(); $a.Dispose(); $b.Dispose()
 }
 
-# Pan — hand
+# Pan
 Save-Icon "pan" {
     param($g)
-    $brush = New-Object System.Drawing.SolidBrush $Tan
-    $pen = Pen $Ink 2
-    $g.FillEllipse($brush, 22, 18, 20, 28)
-    $g.DrawEllipse($pen, 22, 18, 20, 28)
-    $g.FillRectangle($brush, 18, 28, 28, 16)
-    $g.DrawRectangle($pen, 18, 28, 28, 16)
-    $brush.Dispose(); $pen.Dispose()
+    $pen = Pen $Ink
+    $g.DrawEllipse($pen, (7*$Scale), (3.5*$Scale), (6*$Scale), (6*$Scale))
+    $g.DrawLine($pen, (Pt 8.2 8.8), (Pt 8.2 15.5))
+    $g.DrawLine($pen, (Pt 11.8 8.8), (Pt 11.8 15.5))
+    $g.DrawArc($pen, (6.5*$Scale), (12*$Scale), (7*$Scale), (5*$Scale), 10, 160)
+    $pen.Dispose()
 }
 
 # Zoom
 Save-Icon "zoom" {
     param($g)
-    $pen = Pen $Ink 3
-    $g.DrawEllipse($pen, 12, 12, 28, 28)
-    $g.DrawLine($pen, 36, 36, 52, 52)
+    $pen = Pen $Ink
+    $g.DrawEllipse($pen, (3.5*$Scale), (3.5*$Scale), (9*$Scale), (9*$Scale))
+    $g.DrawLine($pen, (Pt 11.2 11.2), (Pt 16.4 16.4))
     $pen.Dispose()
 }
 
 # Zoom extents
 Save-Icon "zoom_extents" {
     param($g)
-    $pen = Pen $Ink 2.5
-    $g.DrawEllipse($pen, 14, 14, 24, 24)
-    $g.DrawLine($pen, 34, 34, 46, 46)
-    $a = Pen $Red 2
-    $g.DrawLine($a, 10, 10, 18, 10); $g.DrawLine($a, 10, 10, 10, 18)
-    $g.DrawLine($a, 54, 10, 46, 10); $g.DrawLine($a, 54, 10, 54, 18)
-    $g.DrawLine($a, 10, 54, 18, 54); $g.DrawLine($a, 10, 54, 10, 46)
-    $g.DrawLine($a, 54, 54, 46, 54); $g.DrawLine($a, 54, 54, 54, 46)
+    $pen = Pen $Ink
+    $g.DrawEllipse($pen, (5.5*$Scale), (5.5*$Scale), (7*$Scale), (7*$Scale))
+    $g.DrawLine($pen, (Pt 11.2 11.2), (Pt 14.2 14.2))
+    $a = Pen $Red
+    $g.DrawLine($a, (Pt 3.2 3.2), (Pt 6.2 3.2)); $g.DrawLine($a, (Pt 3.2 3.2), (Pt 3.2 6.2))
+    $g.DrawLine($a, (Pt 16.8 3.2), (Pt 13.8 3.2)); $g.DrawLine($a, (Pt 16.8 3.2), (Pt 16.8 6.2))
+    $g.DrawLine($a, (Pt 3.2 16.8), (Pt 6.2 16.8)); $g.DrawLine($a, (Pt 3.2 16.8), (Pt 3.2 13.8))
+    $g.DrawLine($a, (Pt 16.8 16.8), (Pt 13.8 16.8)); $g.DrawLine($a, (Pt 16.8 16.8), (Pt 16.8 13.8))
     $pen.Dispose(); $a.Dispose()
 }
 
-Write-Host "Wrote SketchUp-style tool icons to $Out"
-Get-ChildItem $Out -Filter *.png | Select-Object -ExpandProperty Name
+# Customize
+Save-Icon "gear" {
+    param($g)
+    $pen = Pen $Ink
+    $g.DrawEllipse($pen, (7.2*$Scale), (7.2*$Scale), (5.6*$Scale), (5.6*$Scale))
+    for ($i = 0; $i -lt 8; $i++) {
+        $a = $i * [math]::PI / 4
+        $g.DrawLine(
+            $pen,
+            (Pt (10 + 4.2*[math]::Cos($a)) (10 + 4.2*[math]::Sin($a))),
+            (Pt (10 + 6.6*[math]::Cos($a)) (10 + 6.6*[math]::Sin($a)))
+        )
+    }
+    $pen.Dispose()
+}
+
+Write-Host "Wrote 20px / 1.5px tool icons to $Out"

@@ -2,13 +2,14 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-"""O-Form identity — OSAS suite mark, light shell, pastel green accent.
+"""O-Form identity: the OSAS suite brand (docs/BRANDING.md in O-Studio).
 
 O-Form is a clone of Blender. Display strings follow the same pattern as
 O-CoreOp / O-Studio / O-Draft: product name, one-line role, suite line,
 developer credit. The arcs are the suite mark (left half-ring, lower
-half-ring, centre ring). Sister apps fill the plate with a saturated
-accent and draw white arcs; O-Form's pastel plate needs ink arcs.
+half-ring, centre ring) in white on O-Form's colour, Grove #166040, like
+the other apps' marks on theirs. Ink is Midnight #102C80; the dark theme
+uses a lighter tint of Grove so the accent shows on the dark surfaces.
 """
 
 import os
@@ -17,28 +18,33 @@ import zlib
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
-# O-Draft WinUI ColorTokens.xaml (+ O-Form mark plate green for the suite logo).
-# Light — OSAS glass soft-UI (Hcw.Ui SuiteColors)
+# The suite palette (o-ui Themes/SuiteColors.xaml): neutral surfaces, Midnight ink, Grove accent.
+# Light — OSAS soft-UI
 FOG = (228, 234, 242)          # #E4EAF2 AppBackground
 SOFT = (238, 242, 248)         # #EEF2F8 Surface / side pane
 SOFT_SECONDARY = (241, 245, 250)  # #F1F5FA SurfaceSecondary / tool strip
 WHITE = (255, 255, 255)        # SurfaceElevated / ControlSelected (light)
-INK = (26, 35, 50)             # #1A2332 TextPrimary / AccentBrush (light)
-MUTED = (100, 116, 139)        # #64748B TextSecondary
-MUTED_FAINT = (148, 163, 184)  # #94A3B8 TextMuted
+INK = (16, 44, 128)            # #102C80 Midnight: the suite's ink (12.4 : 1 on white)
+MUTED = (62, 86, 160)          # #3E56A0 Midnight soft: secondary text (5.7 : 1 on #E4EAF2)
+MUTED_FAINT = (84, 107, 136)   # #546B88 muted text (4.5 : 1 on #E4EAF2)
 EDGE = (216, 222, 232)         # #D8DEE8 BorderDefault
-# Suite mark plate (logo only — not chrome accent)
-MARK_PLATE = (198, 230, 211)   # #C6E6D3
-MARK_PLATE_ON = (143, 203, 170)
-ACCENT = INK                   # chrome accent = O-Draft AccentBrush
-ACCENT_ON = MARK_PLATE_ON      # soft highlight on light controls
-ACCENT_PRESS = (216, 222, 232) # #D8DEE8 ControlPressed
-SELECT = INK                   # viewport selection (light)
-SELECTED_CTRL = WHITE          # ControlSelectedBrush light
-AI_ACCENT = INK                # CommandChromeAccentBrush light
+# O-Form's colour in the suite: Grove. White on it is 7.6 : 1.
+GROVE = (22, 96, 64)           # #166040
+GROVE_HOVER = (18, 82, 54)     # #125236
+GROVE_PRESSED = (14, 66, 44)   # #0E422C
+GROVE_WASH = (228, 240, 234)   # #E4F0EA selection wash on light surfaces
+MARK_PLATE = GROVE             # the mark's tile
+MARK_GLYPH = WHITE             # the mark's strokes
+MARK_PLATE_ON = GROVE_HOVER
+ACCENT = GROVE                 # chrome accent: primary action, selection, focus
+ACCENT_ON = GROVE_WASH         # soft highlight on light controls
+ACCENT_PRESS = GROVE_PRESSED
+SELECT = GROVE                 # viewport selection (light)
+SELECTED_CTRL = GROVE_WASH     # selected control (light)
+AI_ACCENT = GROVE              # command chrome accent (light)
 CAD_ACCENT = (15, 123, 58)     # #0F7B3A CadChannelBrush
 CANVAS_LIGHT = (255, 255, 255)
-# Dark — O-Draft graphite + Windows blue accent
+# Dark: graphite surfaces, with Grove lightened to show on them (7.1 : 1 on #1B1B1B)
 FOG_DARK = (27, 27, 27)        # #1B1B1B
 SOFT_DARK = (32, 32, 32)       # #202020
 SOFT_SECONDARY_DARK = (42, 42, 42)  # #2A2A2A
@@ -47,11 +53,11 @@ INK_DARK = (243, 243, 243)     # #F3F3F3
 MUTED_DARK = (200, 200, 200)   # #C8C8C8
 MUTED_FAINT_DARK = (154, 154, 154)  # #9A9A9A
 EDGE_DARK = (61, 61, 61)       # #3D3D3D
-AI_ACCENT_DARK = (96, 205, 255)  # #60CDFF Accent / Ask
+AI_ACCENT_DARK = (63, 191, 138)  # #3FBF8A Grove, dark tint
 CAD_ACCENT_DARK = (108, 203, 138)  # #6CCB8A
 CANVAS_DARK = (0, 0, 0)
 SELECT_DARK = AI_ACCENT_DARK
-SELECTED_CTRL_DARK = (26, 59, 92)  # #1A3B5C ControlSelectedBrush
+SELECTED_CTRL_DARK = (20, 48, 42)  # #14302A Grove wash, dark
 # Back-compat aliases used by icon / mark generators
 ACCENT_MARK = MARK_PLATE
 
@@ -147,11 +153,11 @@ def _rounded(size, plate, mark, radius_factor=0.22):
 def mark_svg(name=PRODUCT, plate=None, ink=None):
     """Official OSAS suite mark: C + lower arc + centre ring on a coloured plate.
 
-    Sister apps use white strokes on saturated plates; O-Form uses ink on the
-    pastel green plate so the glyph stays readable.
+    White strokes on O-Form's tile, Grove #166040, as the other apps draw
+    theirs on their own colour.
     """
     plate = plate or MARK_PLATE
-    ink = ink or INK
+    ink = ink or MARK_GLYPH
     fill = "#{:02X}{:02X}{:02X}".format(*plate)
     stroke = "#{:02X}{:02X}{:02X}".format(*ink)
     return (
@@ -186,13 +192,13 @@ def _ico(images):
 
 
 def _splash_rgba(width=960, height=420):
-    """Lockup: pastel mark + O-Form / Modeling text (splash / about strip)."""
+    """Lockup: the mark on its Grove tile (splash.png itself is the suite lockup from o-ui/brand/form)."""
     out = bytearray(width * height * 4)
     # Transparent / white paper background
     for i in range(0, len(out), 4):
         out[i:i + 4] = bytes((255, 255, 255, 255))
     mark_size = min(height - 40, 280)
-    mark = _rounded(mark_size, MARK_PLATE, INK)
+    mark = _rounded(mark_size, MARK_PLATE, MARK_GLYPH)
     ox = 48
     oy = (height - mark_size) // 2
     for py in range(mark_size):
@@ -224,7 +230,7 @@ def write_assets(extra_dirs=None):
     for dest in destinations:
         os.makedirs(dest, exist_ok=True)
 
-    mark_256 = _rounded(256, MARK_PLATE, INK)
+    mark_256 = _rounded(256, MARK_PLATE, MARK_GLYPH)
     mark_png = _png(256, 256, mark_256)
     splash = _png(960, 420, _splash_rgba(960, 420))
     svg = mark_svg()
@@ -232,7 +238,7 @@ def write_assets(extra_dirs=None):
     sizes = (16, 24, 32, 48, 64, 128, 256)
     ico_frames = []
     for size in sizes:
-        rgba = _rounded(size, MARK_PLATE, INK)
+        rgba = _rounded(size, MARK_PLATE, MARK_GLYPH)
         ico_frames.append((size, _png(size, size, rgba)))
     ico_bytes = _ico(ico_frames)
 
@@ -349,6 +355,7 @@ def palette(dark):
             "accent_on": SELECTED_CTRL_DARK,
             "select": SELECT_DARK,
             "selected": SELECTED_CTRL_DARK,
+            "tile": (68, 68, 68),
             "canvas": CANVAS_DARK,
             "ai": AI_ACCENT_DARK,
             "cad": CAD_ACCENT_DARK,
@@ -367,6 +374,7 @@ def palette(dark):
         "accent_on": ACCENT_ON,
         "select": SELECT,
         "selected": SELECTED_CTRL,
+        "tile": (214, 222, 234),
         "canvas": CANVAS_LIGHT,
         "ai": AI_ACCENT,
         "cad": CAD_ACCENT,
@@ -423,6 +431,17 @@ def _style_menus(ui, colors, dark):
         )
 
 
+def _style_tool_tiles(ui, colors):
+    """Icon tiles stay empty until hover or the active tool, then the tile fills."""
+    tile = colors["tile"]
+    for name in ("wcol_regular", "wcol_tool", "wcol_toolbar_item"):
+        widget = getattr(ui, name, None)
+        if widget is None or not hasattr(widget, "inner_sel"):
+            continue
+        _paint(widget, "inner_sel", (*_unit(tile), 1.0))
+        _paint(widget, "outline_sel", (*_unit(tile), 0.0))
+
+
 def apply_theme(context, dark=None):
     """O-Draft-aligned shell: graphite or off-white chrome, black/white canvas."""
     if dark is None:
@@ -450,6 +469,7 @@ def apply_theme(context, dark=None):
             outline=colors["edge"],
         )
     _style_menus(ui, colors, dark)
+    _style_tool_tiles(ui, colors)
     _paint(ui, "editor_border", _unit(colors["edge"]))
     _paint(ui, "editor_outline", (*_unit(colors["edge"]), 1.0))
     _paint(ui, "editor_outline_active", (*_unit(colors["accent"]), 1.0))

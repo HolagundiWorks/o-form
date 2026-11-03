@@ -37,7 +37,7 @@ O-Form is **not** affiliated with the Blender Foundation or with Trimble. It doe
 **Implemented**
 
 - Windows lite build target `make oform 2022b` → `oform.exe`
-- App template with suite branding (pastel green accent)
+- App template with the suite brand: Grove accent, Midnight ink, the suite mark on a Grove tile
 - SketchUp-aligned tools: Select, Eraser, Paint, Line, Freehand, Arc, Rectangle, Circle, Polygon, Push/Pull, Follow Me, Offset, Move, Rotate, Scale, Tape Measure, Protractor, Back Edges, Orbit, Pan, Zoom, Zoom Extents
 - Groups and Components (G / Ctrl+G, double-click to edit, Esc to close, Explode)
 - O-Draft-aligned shell: left tools + Properties/Ask side panels, light/dark toggle, Ask AI with Allow/Decline
@@ -67,7 +67,7 @@ Identity module: `scripts/startup/bl_app_templates_system/oform/brand.py`.
 | Suite | OSAS · Open Source Architecture Suit |
 | Credit | Developed by Human Centric Works · Hospet |
 | Origin | A clone of Blender |
-| Accent | Pastel green `#C6E6D3` (ink arcs `#17181B`) |
+| Accent | Grove `#166040` (white arcs; dark theme `#3FBF8A`); ink Midnight `#102C80` ([BRANDING.md](docs/BRANDING.md)) |
 
 ## Layout and tools
 

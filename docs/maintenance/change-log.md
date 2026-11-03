@@ -1,5 +1,11 @@
 # Documentation audit change log
 
+## 2026-11-03: the suite brand
+
+- O-Form wears the suite brand ([BRANDING.md](../BRANDING.md)): Grove `#166040` accent (dark tint `#3FBF8A`), Midnight `#102C80` ink, the suite mark in white on a Grove tile. The pastel green plate, the slate ink and the Windows-blue dark accent are gone.
+- `brand.py` carries the new palette; `mark.svg`, `mark.png`, `mark-256.png`, `app.ico`, `favicon.ico`, `file.ico` and `splash.png` are the artwork in `o-ui/brand/form` (the splash is the suite lockup); the tool icons are redrawn in Midnight with Grove for the push/pull accent (`_gen_tool_icons.ps1`).
+- The Windows resource icons (`release/windows/icons`), the freedesktop and `icons_svg` marks and the MSIX tile images use the same mark.
+
 **Pass date:** 2026-10-23
 
 ## Later same day — pastel green suite rebrand + Delete

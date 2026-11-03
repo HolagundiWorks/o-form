@@ -6,21 +6,22 @@
 
 ---
 
-## 1. Design tokens (ColorTokens.xaml)
+## 1. Design tokens (the suite palette: o-ui `Themes/SuiteColors*.xaml`, brand guide in [BRANDING.md](../BRANDING.md))
 
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
 | `fog` | `#E4EAF2` | `#1B1B1B` | App chrome |
 | `panel` | `#EEF2F8` | `#202020` | Side pane |
 | `surface` | `#FFFFFF` | `#2C2C2C` | Controls |
-| `ink` / accent | `#1A2332` | `#60CDFF` | Text / chrome accent |
-| `muted` | `#64748B` | `#C8C8C8` | Secondary |
+| `ink` | `#102C80` (Midnight) | `#F3F3F3` | Text |
+| accent | `#166040` (Grove) | `#3FBF8A` | Chrome accent: primary action, selection, focus |
+| `muted` | `#3E56A0` | `#C8C8C8` | Secondary (5.7 : 1 on the app background) |
 | `edge` | `#D8DEE8` | `#3D3D3D` | Borders |
-| `selected` | `#FFFFFF` | `#1A3B5C` | Selected control |
-| `ai` | `#1A2332` | `#60CDFF` | Ask top accent |
+| `selected` | `#E4F0EA` | `#14302A` | Selected control (Grove wash) |
+| `ai` | `#166040` | `#3FBF8A` | Ask top accent |
 | `cad` | `#0F7B3A` | `#6CCB8A` | VCB left edge |
 | `canvas` | `#FFFFFF` | `#000000` | Modelling paper |
-| mark plate | `#C6E6D3` | | Suite logo only |
+| mark | Grove tile `#166040`, white strokes | | The suite mark (`oform/mark.svg`) |
 
 Density: **32 DIP** tool buttons, **280 DIP** side panel, Ask bar max **600**, strip column **40**.
 
