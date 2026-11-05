@@ -191,6 +191,9 @@ _ICON_FILES = {
     "oform.tool_follow_me": "follow_me.png",
     "oform.tool_scale": "scale.png",
     "oform.tool_offset": "offset.png",
+    "oform.copy_selection": "copy.png",
+    "oform.boolean_trim": "trim.png",
+    "oform.preferences_hint": "gear.png",
     "oform.tool_tape": "tape.png",
     "oform.tool_protractor": "protractor.png",
     "oform.tool_back_edges": "back_edges.png",
@@ -1174,64 +1177,117 @@ def _poll_side_panel(context):
     return _props_role(context) == "side"
 
 
-def _draw_strip_items(column, items, *, active=""):
-    """O-Draft tool strip: 32px icon buttons, 4px between them, a wider break between groups."""
-    gap = False
+def _tool_button(layout, context, idname):
+    """20px glyph. The tile fills only while hovered or while the tool is active."""
+    active = _active_tool(context)
+    hover = ""
+    window_manager = getattr(context, "window_manager", None)
+    if window_manager is not None:
+        hover = window_manager.get("oform_tool_hover", "") or ""
+    filled = idname == active or idname == hover
+    custom = _tool_icon_value(idname)
+    kwargs = {"text": "", "depress": filled, "emboss": filled}
+    if custom:
+        kwargs["icon_value"] = custom
+    else:
+        kwargs["icon"] = _tool_icon(idname)
+    layout.operator(idname, **kwargs)
+
+
+def _group_divider(layout):
+    """Thin line between tool groups."""
+    try:
+        layout.separator(factor=1.0, type="LINE")
+    except (TypeError, ValueError):
+        layout.separator(factor=0.6)
+
+
+def note_toolbar_pointer(context, event):
+    """Remember which tool tile is under the pointer so its background can fill."""
+    window_manager = getattr(context, "window_manager", None)
+    window = getattr(context, "window", None)
+    screen = getattr(window, "screen", None) if window is not None else None
+    if window_manager is None or screen is None:
+        return
+    hit = ""
+    if event.type in {"MOUSEMOVE", "INBETWEEN_MOUSEMOVE", "LEFTMOUSE"}:
+        hit = _toolbar_hit(screen, event.mouse_x, event.mouse_y)
+    previous = window_manager.get("oform_tool_hover", "") or ""
+    if hit == previous:
+        return
+    window_manager["oform_tool_hover"] = hit
+    for area in screen.areas:
+        if _is_toolbar_area(area):
+            area.tag_redraw()
+
+
+def _toolbar_hit(screen, mouse_x, mouse_y):
+    """Operator id under the pointer, or ''."""
+    area = None
+    for candidate in screen.areas:
+        if not _is_toolbar_area(candidate):
+            continue
+        if (
+            candidate.x <= mouse_x < candidate.x + candidate.width
+            and candidate.y <= mouse_y < candidate.y + candidate.height
+        ):
+            area = candidate
+            break
+    if area is None:
+        return ""
+    unit = 20.0 * _ui_scale()
+    button = unit * _ICON_SCALE
+    divider = unit * (6.0 / 20.0)
+    margin = unit * 0.4
+    x = area.x + margin
+    for item in design.TOOL_STRIP:
+        if item is None:
+            x += divider
+            continue
+        if x <= mouse_x < x + button:
+            return item[0]
+        x += button
+    return ""
+
+
+def _draw_strip_items(column, items, context, *, active=""):
+    """Tool groups separated by a thin line. Tiles fill on hover."""
+    _ = active
     for item in items:
         if item is None:
-            column.separator(factor=0.55)
-            gap = False
+            _group_divider(column)
             continue
-        if gap:
-            column.separator(factor=0.2)
-        gap = True
         idname, _label = item
-        is_active = active == idname
         row = column.row(align=True)
         row.alignment = "CENTER"
+        row.scale_x = _ICON_SCALE
         row.scale_y = _ICON_SCALE
-        custom = _tool_icon_value(idname)
-        kwargs = {"text": "", "depress": is_active, "emboss": True}
-        if custom:
-            kwargs["icon_value"] = custom
-        else:
-            kwargs["icon"] = _tool_icon(idname)
-        row.operator(idname, **kwargs)
+        _tool_button(row, context, idname)
 
 
 def _draw_tool_bar(layout, context):
     """Horizontal modelling toolbar on the row under the menus."""
-    active = _active_tool(context)
     row = layout.row(align=True)
     row.alignment = "LEFT"
-    row.scale_x = 1.2
-    row.scale_y = 1.45
+    row.scale_x = _ICON_SCALE
+    row.scale_y = _ICON_SCALE
     for item in design.TOOL_STRIP:
         if item is None:
-            row.separator()
+            _group_divider(row)
             continue
-        idname, _label = item
-        is_active = active == idname
-        custom = _tool_icon_value(idname)
-        kwargs = {"text": "", "depress": is_active, "emboss": True}
-        if custom:
-            kwargs["icon_value"] = custom
-        else:
-            kwargs["icon"] = _tool_icon(idname)
-        row.operator(idname, **kwargs)
+        _tool_button(row, context, item[0])
 
 
 def _draw_tool_strip(layout, context):
     """Vertical fallback. The live toolbar is `_draw_tool_bar` on the top bar."""
-    active = _active_tool(context)
     column = layout.column(align=False)
-    _draw_strip_items(column, design.TOOL_STRIP, active=active)
+    _draw_strip_items(column, design.TOOL_STRIP, context)
 
 
-def _draw_bim_strip(layout):
-    """Vertical BIM strip (same 32 DIP targets as the modelling strip)."""
+def _draw_bim_strip(layout, context):
+    """Vertical BIM strip (same 20px targets as the modelling strip)."""
     column = layout.column(align=False)
-    _draw_strip_items(column, design.BIM_TOOLBAR, active="")
+    _draw_strip_items(column, design.BIM_TOOLBAR, context)
 
 
 class OFORM_PT_tool_bar(Panel):
@@ -1289,7 +1345,7 @@ class OFORM_PT_bim_toolbar(Panel):
 
     def draw(self, context):
         _ = context
-        _draw_bim_strip(self.layout)
+        _draw_bim_strip(self.layout, context)
 
 
 _NAV_PANELS = (OFORM_PT_tool_bar, OFORM_PT_large_tool_set, OFORM_PT_bim_toolbar)

@@ -36,8 +36,9 @@ SPACE_XL = 16
 # SpaceSm (4) between buttons, PaddingSm (4) around the column.
 MIN_TARGET = 36
 CONTROL_HEIGHT = 36
-ICON_BUTTON = 32
-ICON_SIZE = 24
+ICON_BUTTON = 28
+ICON_SIZE = 20
+ICON_STROKE = 1.5
 SPLITTER = 8
 SIDE_PANEL_DIP = 280
 SIDE_PANEL_MIN_DIP = 180
@@ -48,8 +49,8 @@ ASK_BAR_HEIGHT = 36
 CORNER_CHROME = 3
 CORNER_CONTROL = 4
 
-# Blender UI scale ≈ DIP target / default button (~20 px).
-ICON_SCALE = ICON_BUTTON / 20.0  # 1.6 → ~32 px targets
+# Button scale so a preview glyph lands at ICON_SIZE (20px) after Blender's preview padding.
+ICON_SCALE = 1.25
 
 # Layout fractions (fallback when window width unknown).
 TOOL_STRIP_RATIO = 0.04

@@ -467,6 +467,12 @@ class _Tool:
     def _event(self, context, event):
         # Clicks / moves outside the 3D view must reach the status bar, menus,
         # and side toolbars (theme toggle, units, BIM strip, etc.).
+        try:
+            import ui as oform_ui
+
+            oform_ui.note_toolbar_pointer(context, event)
+        except Exception:
+            pass
         if event.type in {
             "LEFTMOUSE",
             "RIGHTMOUSE",
