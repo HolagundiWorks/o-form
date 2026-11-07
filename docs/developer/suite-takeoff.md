@@ -1,4 +1,4 @@
-# Suite take-off coherence — O-Form · O-Draft · O-CoreOp
+# Suite take-off coherence — Finch · Tren · Falcon
 
 One ShilpiDB store (`127.0.0.1:7420`), one identity, two payload layers.
 
@@ -7,7 +7,7 @@ One ShilpiDB store (`127.0.0.1:7420`), one identity, two payload layers.
 | Key | Meaning |
 |-----|---------|
 | `drawing_id` | Stable UUID (`oform_drawing_id`) |
-| `slot` | `SlotFor(drawing_id)` — same algorithm as O-CoreOp `ShilpiTakeoff.SlotFor` |
+| `slot` | `SlotFor(drawing_id)` — same algorithm as Falcon `ShilpiTakeoff.SlotFor` |
 | `project_office_id` | AORMS / suite project |
 | `project_ref` | Optional `{v, company_uuid, project_id}` |
 
@@ -19,16 +19,16 @@ id = (kind << 56) | (slot << 32) | n
 
 | kind | format | Consumer |
 |------|--------|----------|
-| **1** | `hcw-takeoff-shilpi` header | O-CoreOp take-off import |
-| **3–8** | bridge rows (walls, openings, …) | O-CoreOp / O-Draft |
-| **20** | `oform-ifc-shilpi` header | O-Form IFC sidecar |
-| **21** | IFC element JSON | O-Form |
+| **1** | `hcw-takeoff-shilpi` header | Falcon take-off import |
+| **3–8** | bridge rows (walls, openings, …) | Falcon / Tren |
+| **20** | `oform-ifc-shilpi` header | Finch IFC sidecar |
+| **21** | IFC element JSON | Finch |
 
-## O-Form modules
+## Finch modules
 
 | Module | Role |
 |--------|------|
-| `suite_ids.py` | SlotFor / MakeId / drawing_id (O-CoreOp vectors) |
+| `suite_ids.py` | SlotFor / MakeId / drawing_id (Falcon vectors) |
 | `bridge_rows.py` | IfcWall/Slab/… → bridge row mm |
 | `takeoff.py` | Push/read `hcw-takeoff-shilpi` |
 | `shilpi_ifc.py` | Kinds 20–21 sidecar |
@@ -40,16 +40,16 @@ id = (kind << 56) | (slot << 32) | n
 
 ## Protocol
 
-`recording` header → rows → delete stale → `complete` → `save` (same as O-Draft `takeoff.record`).
+`recording` header → rows → delete stale → `complete` → `save` (same as Tren `takeoff.record`).
 
 ## Project folder
 
-O-Studio scaffolds `osas.project.json` with a shared `drawing_id`. See [osas-project-folder.md](osas-project-folder.md).
+Kivo scaffolds `osas.project.json` with a shared `drawing_id`. See [osas-project-folder.md](osas-project-folder.md).
 
 ## Project folder
 
-O-Studio scaffolds `osas.project.json` with a shared `drawing_id`. See [osas-project-folder.md](osas-project-folder.md).
+Kivo scaffolds `osas.project.json` with a shared `drawing_id`. See [osas-project-folder.md](osas-project-folder.md).
 
 ## Project folder
 
-O-Studio scaffolds `osas.project.json` with a shared `drawing_id`. See [osas-project-folder.md](osas-project-folder.md).
+Kivo scaffolds `osas.project.json` with a shared `drawing_id`. See [osas-project-folder.md](osas-project-folder.md).

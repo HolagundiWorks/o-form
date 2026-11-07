@@ -1,10 +1,10 @@
-# SketchUp interface & power-user case study → O-Form
+# SketchUp interface & power-user case study → Finch
 
 Research date: 2026-10-24. Sources: SketchUp QRC 2024 (Windows), [Tips and Tricks](https://help.sketchup.com/en/sketchup/tips-and-tricks), [Measurements Box](https://help.sketchup.com/en/using-measurements-box), [Solid Tools](https://help.sketchup.com/en/sketchup/modeling-complex-3d-shapes-solid-tools), MasterSketchUp workspace guide, Level Up SketchUp *Status Bar Deep Dive* (YouTube), SketchUp Training Series *Copies and Arrays* (YouTube), r/Sketchup shortcut threads (2023–2024).
 
 ## Interface anatomy (what power users keep on screen)
 
-| SketchUp | Role | O-Form mapping |
+| SketchUp | Role | Finch mapping |
 | --- | --- | --- |
 | Large Tool Set (left) | Primary modelling tools, icon-only | Left PROPERTIES rail `_LARGE_TOOL_SET` |
 | Status bar centre | Live tool prompt + modifiers | `oform_status` |
@@ -22,13 +22,13 @@ Workspace advice from MasterSketchUp: enable Large Tool Set, memorize its shortc
 3. **Groups isolate; components reuse** — Reddit + tips: never leave raw geometry stuck to the model.
 4. **Push/Pull** — type distance; Ctrl copies face; **double-click repeats last** (QRC).
 5. **Move/Rotate copy arrays** — Ctrl copy once, then `Nx` external or `N/` internal (Training Series + Measurements Box).
-6. **Follow Me** — select path first, then face; Alt for full perimeter (QRC; O-Form: path then face).
+6. **Follow Me** — select path first, then face; Alt for full perimeter (QRC; Finch: path then face).
 7. **Solids** — watertight manifold; Union / Subtract / Intersect / Trim / Outer Shell (help + Notre Dame guide).
 8. **ESC before Undo** — cancel in-progress tool state (tips).
 
 ## Power-user commands (Reddit + custom shortcuts)
 
-| Habit | Typical binding | O-Form |
+| Habit | Typical binding | Finch |
 | --- | --- | --- |
 | Unhide last | `U` | `U` |
 | Unhide all | `Shift+U` | `Shift+U` |

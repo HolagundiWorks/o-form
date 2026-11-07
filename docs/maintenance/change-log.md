@@ -2,7 +2,7 @@
 
 ## 2026-11-03: the suite brand
 
-- O-Form wears the suite brand ([BRANDING.md](../BRANDING.md)): Grove `#166040` accent (dark tint `#3FBF8A`), Midnight `#102C80` ink, the suite mark in white on a Grove tile. The pastel green plate, the slate ink and the Windows-blue dark accent are gone.
+- Finch wears the suite brand ([BRANDING.md](../BRANDING.md)): Grove `#166040` accent (dark tint `#3FBF8A`), Midnight `#102C80` ink, the suite mark in white on a Grove tile. The pastel green plate, the slate ink and the Windows-blue dark accent are gone.
 - `brand.py` carries the new palette; `mark.svg`, `mark.png`, `mark-256.png`, `app.ico`, `favicon.ico`, `file.ico` and `splash.png` are the artwork in `o-ui/brand/form` (the splash is the suite lockup); the tool icons are redrawn in Midnight with Grove for the push/pull accent (`_gen_tool_icons.ps1`).
 - The Windows resource icons (`release/windows/icons`), the freedesktop and `icons_svg` marks and the MSIX tile images use the same mark.
 
@@ -10,9 +10,9 @@
 
 ## Later same day — pastel green suite rebrand + Delete
 
-- Regenerated OSAS suite mark (C + arcs + centre ring) on pastel green `#C6E6D3` with ink strokes
+- Regenerated suite mark (C + arcs + centre ring) on pastel green `#C6E6D3` with ink strokes
 - Assets: `mark.png`, `splash.png`, `mark.svg`, `app.ico`, `favicon.ico`, `file.ico`
-- Windows `winblender.ico` / `winblenderfile.ico` + RC product strings → O-Form; freedesktop SVG icons
+- Windows `winblender.ico` / `winblenderfile.ico` + RC product strings → Finch; freedesktop SVG icons
 - `oform.delete_selection` on Delete key (and Edit menu) removes selected geometry / groups
 
 ## Later same day — SketchUp modelling foundation
@@ -30,11 +30,11 @@
 - Removed addons: `io_anim_bvh`, `pose_library`, `rigify`, `viewport_vr_preview`, `node_wrangler`, `hydra_storm`
 - Removed system app templates: `2D_Animation`, `Sculpting`, `Storyboarding`, `VFX`, `Video_Editing`
 
-## Later same day — O-Draft shell UI
+## Later same day — Tren shell UI
 
 - Light/dark theme toggle (status bar + Window); solid white/black canvas, no ground grid
 - Left Properties + Ask panels; Ask overlay + Allow/Decline (`ai.py`)
-- Docs/README status updated for shell parity with O-Draft
+- Docs/README status updated for shell parity with Tren
 
 ## Later same day — Groups and Components
 
@@ -71,9 +71,9 @@
 
 ## Modified
 
-- `README.md` — full O-Form product landing with docs index and verified status
+- `README.md` — full Finch product landing with docs index and verified status
 - `.github/README.md` — replaced Blender mirror text
-- `.github/pull_request_template.md` — O-Form PR checklist
+- `.github/pull_request_template.md` — Finch PR checklist
 - `AUTHORS` — header comment only (Blender names preserved)
 - `scripts/startup/bl_app_templates_system/oform/brand.py` — `PRINCIPLE` string
 - `scripts/startup/bl_app_templates_system/oform/ui.py` — About/splash show principle
@@ -85,7 +85,7 @@
 ## Intentionally left unchanged
 
 - `COPYING`, `doc/license/**`, `release/license/**`
-- `release/text/readme.html`, `release/text/copyright.txt` (already O-Form from prior pass)
+- `release/text/readme.html`, `release/text/copyright.txt` (already Finch from prior pass)
 - Inherited `doc/python_api/**`, `doc/doxygen/**`, nested Blender READMEs under `build_files/`, `tools/`, `tests/`, `extern/`, `lib/`
 - Git remotes, branches, tags, history
 - C++ symbol names, `bpy`, executable target `blender`

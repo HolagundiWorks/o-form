@@ -1,10 +1,10 @@
-# O-Form documentation
+# Finch documentation
 
-Product documentation for **O-Form**, the 3D modelling application in **OSAS** (Open Source Architecture Suit).
+Product documentation for **Finch**, the 3D modelling application in **the Kivo suite**.
 
 **Open Source. Built for Architects. Driven by Community.**
 
-O-Form is a clone of Blender 5.2.3 LTS. This `docs/` tree describes the product. Inherited Blender developer manuals and generators remain under [`doc/`](../doc/).
+Finch is a clone of Blender 5.2.3 LTS. This `docs/` tree describes the product. Inherited Blender developer manuals and generators remain under [`doc/`](../doc/).
 
 ## Guides
 
@@ -15,11 +15,11 @@ O-Form is a clone of Blender 5.2.3 LTS. This `docs/` tree describes the product.
 | [UI design system](developer/ui-design-system.md) | Tokens, workspace layout, command taxonomy |
 | [Developer guide](developer/architecture.md) | Independence policy, remotes, architecture, checks |
 | [BIM ↔ ShilpiDB](developer/bim-shilpidb.md) | IFC sidecar on shared suite store |
-| [Suite take-off](developer/suite-takeoff.md) | Coherent take-off across O-Form · O-Draft · O-CoreOp |
-| [OSAS project folder](developer/osas-project-folder.md) | O-Studio create → draft + form + shilpi + live sync |
-| [OSAS project folder](developer/osas-project-folder.md) | O-Studio create → draft + form + shilpi, live sync |
-| [OSAS project folder](developer/osas-project-folder.md) | O-Studio create → draft + form + shilpi, live sync |
-| [Releases](developer/releases.md) | O-Form-owned versioning and release checklist |
+| [Suite take-off](developer/suite-takeoff.md) | Coherent take-off across Finch · Tren · Falcon |
+| [OSAS project folder](developer/osas-project-folder.md) | Kivo create → draft + form + shilpi + live sync |
+| [OSAS project folder](developer/osas-project-folder.md) | Kivo create → draft + form + shilpi, live sync |
+| [OSAS project folder](developer/osas-project-folder.md) | Kivo create → draft + form + shilpi, live sync |
+| [Releases](developer/releases.md) | Finch-owned versioning and release checklist |
 | [Windows build](build/windows.md) | Prerequisites, `make oform`, selftest |
 | [Licensing policy](licensing/policy.md) | Open-source / GPL policy and unresolved questions |
 | [Licensing / attribution](licensing/attribution.md) | Map of LICENSE, COPYING, NOTICE, third-party files |

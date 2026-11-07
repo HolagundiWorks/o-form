@@ -46,7 +46,7 @@ and cleared `__pycache__` when that install tree exists.
 
 | Check | Reason |
 | --- | --- |
-| Sphinx / Doxygen doc build | Not required for O-Form product docs; inherited generators unchanged; heavy dependency |
+| Sphinx / Doxygen doc build | Not required for Finch product docs; inherited generators unchanged; heavy dependency |
 | Full C++ rebuild | Documentation / Python branding only |
 | `oform` selftest this pass | No mesh/tool logic changed; last known contract remains prior successful run |
 | Exhaustive `rg Blender` over all of `source/` | Intentionally avoided; Class C technical names must remain |

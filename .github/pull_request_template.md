@@ -1,11 +1,11 @@
 ## Summary
 
-<!-- What changed and why (O-Form product / docs / build). -->
+<!-- What changed and why (Finch product / docs / build). -->
 
 ## Type
 
 - [ ] Documentation
-- [ ] O-Form app template (`scripts/startup/bl_app_templates_system/oform/`)
+- [ ] Finch app template (`scripts/startup/bl_app_templates_system/oform/`)
 - [ ] Build / CMake / packaging
 - [ ] Window manager / other C++
 - [ ] Other

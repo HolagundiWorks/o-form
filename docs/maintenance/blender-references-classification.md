@@ -7,13 +7,13 @@
 
 | Location | Notes |
 | --- | --- |
-| `README.md` | O-Form product README |
-| `docs/**` | New O-Form documentation tree |
-| `CONTRIBUTING.md` | O-Form contribution entry |
-| `.github/README.md` | Was Blender mirror README; now O-Form |
-| `.github/pull_request_template.md` | Was projects.blender.org; now O-Form |
+| `README.md` | Finch product README |
+| `docs/**` | New Finch documentation tree |
+| `CONTRIBUTING.md` | Finch contribution entry |
+| `.github/README.md` | Was Blender mirror README; now Finch |
+| `.github/pull_request_template.md` | Was projects.blender.org; now Finch |
 | `.github/FUNDING.yml` | Removed (was fund.blender.org) |
-| `release/text/readme.html` | O-Form end-user readme (prior pass) |
+| `release/text/readme.html` | Finch end-user readme (prior pass) |
 | `scripts/.../oform/brand.py`, `ui.py` | Product strings / About |
 
 ## Class B — Legal (preserved)
@@ -24,7 +24,7 @@
 | `AUTHORS` | Blender copyright author list (comment note added only) |
 | `doc/license/*` | License texts |
 | `release/license/*` | Third-party notices |
-| `release/text/copyright.txt` | Blender copyright + O-Form product lines |
+| `release/text/copyright.txt` | Blender copyright + Finch product lines |
 | SPDX `Blender Authors` headers | Required attribution |
 
 ## Class C — Technical (must remain accurate)

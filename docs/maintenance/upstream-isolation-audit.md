@@ -20,17 +20,17 @@
 | --- | --- | --- |
 | No Blender source remote on `origin` | — | Keep |
 | `build_files/utils/make_update.py` can create `lfs-fallback` to `projects.blender.org/blender/blender.git` for **LFS** | Optional tooling / dependency fetch | Document: asset fallback only; remove after use; independence checker **warns** |
-| `build_files/cmake/example_scripts/cmake_linux_install.sh` clones Blender | Historical example script | Leave in tree; not O-Form onboarding |
+| `build_files/cmake/example_scripts/cmake_linux_install.sh` clones Blender | Historical example script | Leave in tree; not Finch onboarding |
 | `build_files/build_environment/**` URLs to projects.blender.org for lib packages | Third-party / lib download | Leave; not source merge |
-| `tools/triage/*`, `release/release_notes/*` projects.blender.org APIs | Historical Blender release tooling | Leave; not wired into O-Form product workflow |
-| `release/windows/batch/*.cmd` “report bug on projects.blender.org” | Obsolete product-facing string in Blender debug launchers | Left this pass (not O-Form `oform.exe` entry); tracked as optional cleanup |
+| `tools/triage/*`, `release/release_notes/*` projects.blender.org APIs | Historical Blender release tooling | Leave; not wired into Finch product workflow |
+| `release/windows/batch/*.cmd` “report bug on projects.blender.org” | Obsolete product-facing string in Blender debug launchers | Left this pass (not Finch `oform.exe` entry); tracked as optional cleanup |
 | `docs/**`, `CONTRIBUTING.md` provenance mentions of Blender | Required legal / historical attribution | Preserve |
 | SPDX / `AUTHORS` / `COPYING` / `release/license/**` | Required legal | Preserve |
 | Internal `bpy`, `BLENDER_VERSION`, `.blend` | Technical identifiers | Preserve |
 
 ## Active upstream synchronization
 
-**None found** in GitHub Actions or O-Form product docs. No scheduled workflow fetches or merges Blender source into this repository.
+**None found** in GitHub Actions or Finch product docs. No scheduled workflow fetches or merges Blender source into this repository.
 
 ## Changes this pass
 

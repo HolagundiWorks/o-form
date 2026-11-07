@@ -1,8 +1,8 @@
-# O-Form user overview
+# Finch user overview
 
-O-Form is the 3D modelling application in **OSAS** (Open Source Architecture Suit). It is built for focused solid modelling: draw on faces, push and pull, measure as you go.
+Finch is the 3D modelling application in **the Kivo suite**. It is built for focused solid modelling: draw on faces, push and pull, measure as you go.
 
-The product UI is moving to a **single O-Form design system** (architecture-first chrome, SketchUp-like direct modelling, Blender-class geometry underneath)—not a mix of Blender and SketchUp interfaces. See [UI redesign audit](../developer/ui-redesign-audit.md).
+The product UI is moving to a **single Finch design system** (architecture-first chrome, SketchUp-like direct modelling, Blender-class geometry underneath)—not a mix of Blender and SketchUp interfaces. See [UI redesign audit](../developer/ui-redesign-audit.md).
 
 **Principle:** Open Source. Built for Architects. Driven by Community.
 
@@ -20,19 +20,19 @@ The product UI is moving to a **single O-Form design system** (architecture-firs
 | Full perpendicular / intersection inference suite | Partial (axis, parallel, from-point, face plane) |
 | macOS / Linux product builds | Not verified as product targets |
 | SketchUp `.skp` | Not supported / not claimed |
-| BIM / IFC4 | Native engine: classify, storeys, IFC I/O; **Push BIM + Take-off** writes suite `hcw-takeoff-shilpi` for O-Draft / O-CoreOp |
+| BIM / IFC4 | Native engine: classify, storeys, IFC I/O; **Push BIM + Take-off** writes suite `hcw-takeoff-shilpi` for Tren / Falcon |
 | Ask AI | Keyword channel + optional external ask command |
 
-O-Form is **not** affiliated with the Blender Foundation or Trimble. It does not use SketchUp files, icons, or artwork.
+Finch is **not** affiliated with the Blender Foundation or Trimble. It does not use SketchUp files, icons, or artwork.
 
 ## Workspace
 
-On launch, O-Form opens an editable mesh named `Model` in edit mode. Tab does not leave edit mode. The shell follows the same pattern as **O-Draft**: menus, left tools/side panels, solid canvas, status bar, and an Ask channel.
+On launch, Finch opens an editable mesh named `Model` in edit mode. Tab does not leave edit mode. The shell follows the same pattern as **Tren**: menus, left tools/side panels, solid canvas, status bar, and an Ask channel.
 
 - **Menus:** File, Edit, View, Camera, Draw, Tools, Solids, BIM, Window, Help  
 - **Right-click** in the 3D view opens the **BIM** menu — map the selection to an IFC component (Wall, Slab, Door, …). Edit-mode faces are promoted to a component first.  
 - **Left pane:** SketchUp-style Large Tool Set (icon rail, incl. Solid Union / Subtract / Intersect), Properties (context / groups), Ask (AI)  
-- **View:** Perspective, Z-up, RGB axes, **no ground grid** — solid white/black paper like SketchUp / O-Draft  
+- **View:** Perspective, Z-up, RGB axes, **no ground grid** — solid white/black paper like SketchUp / Tren  
 - **Theme:** Status-bar Light/Dark toggle (Window → Preferences or status bar); canvas stays pure white or black  
 - **Ask:** Left Ask panel (type there). On-canvas strip only for VCB while measuring or pending Allow/Decline — not a fake text field  
 - **Status:** Tool hint, theme toggle, **VCB** measurements, Human Centric Works · Hospet  
@@ -42,7 +42,7 @@ On launch, O-Form opens an editable mesh named `Model` in edit mode. Tab does no
 
 ## Tools and shortcuts
 
-Defaults follow [SketchUp’s keyboard shortcuts](https://help.sketchup.com/en/default-keyboard-shortcuts) where O-Form implements the tool.
+Defaults follow [SketchUp’s keyboard shortcuts](https://help.sketchup.com/en/default-keyboard-shortcuts) where Finch implements the tool.
 
 | Tool | Key |
 | --- | --- |

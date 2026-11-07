@@ -1,13 +1,13 @@
-# O-Form releases
+# Finch releases
 
-O-Form owns its release process. Releases are **not** synchronized to Blender upstream tags or schedules.
+Finch owns its release process. Releases are **not** synchronized to Blender upstream tags or schedules.
 
 ## Versioning
 
 | Kind | Where | Notes |
 | --- | --- | --- |
 | Internal Blender compatibility version | `source/blender/blenkernel/BKE_blender_version.h` (`BLENDER_VERSION` 502 / patch 3 / LTS) | Keeps `.blend` and prebuilt libs aligned. **Do not bump casually.** |
-| O-Form product release | Git tags / GitHub Releases on this repository | Chosen by O-Form maintainers; need not match Blender’s marketing version |
+| Finch product release | Git tags / GitHub Releases on this repository | Chosen by Finch maintainers; need not match Blender’s marketing version |
 
 Do **not** automate “follow latest Blender tag” version sync. Changing `BLENDER_VERSION` can break libraries and file IO; treat it as a compatibility project, not a branding knob.
 
@@ -30,7 +30,7 @@ Do **not** automate “follow latest Blender tag” version sync. Changing `BLEN
 
 ## What not to do
 
-- Do not merge Blender release branches into O-Form to “catch up.”  
+- Do not merge Blender release branches into Finch to “catch up.”  
 - Do not require projects.blender.org for release coordination.  
 - Do not rewrite history when tagging.  
 - Do not ship builds without license/notice files to “simplify” branding.  

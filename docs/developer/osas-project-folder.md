@@ -1,6 +1,6 @@
-# OSAS project folder — O-Studio · O-Draft · O-Form · ShilpiDB
+# OSAS project folder — Kivo · Tren · Finch · ShilpiDB
 
-Creating a project in **O-Studio** scaffolds a folder beside the company file:
+Creating a project in **Kivo** scaffolds a folder beside the company file:
 
 ```text
 <company_dir>/projects/<slug>-<id>/
@@ -15,15 +15,15 @@ Creating a project in **O-Studio** scaffolds a folder beside the company file:
 
 | Field | Role |
 |-------|------|
-| `project_ref` | O-Studio `ProjectRef` (`company_uuid` + `project_id`) |
+| `project_ref` | Kivo `ProjectRef` (`company_uuid` + `project_id`) |
 | `drawing_id` | Shared UUID for take-off + IFC sidecar slots |
 | `project_office_id` | AORMS id when linked, else `company_uuid:project_id` |
 
 ## Live sync
 
-`sync.mode = "live"` — O-Form polls ShilpiDB and pushes BIM/take-off when the model changes; O-Draft / O-CoreOp read the same `hcw-takeoff-shilpi` header on the same `drawing_id`.
+`sync.mode = "live"` — Finch polls ShilpiDB and pushes BIM/take-off when the model changes; Tren / Falcon read the same `hcw-takeoff-shilpi` header on the same `drawing_id`.
 
-## O-Form
+## Finch
 
 **File → Open Project Folder…** binds `osas.project.json`, starts/joins ShilpiDB on `shilpi/project.vdb`, enables live sync.
 
