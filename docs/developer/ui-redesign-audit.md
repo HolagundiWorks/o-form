@@ -1,7 +1,7 @@
-# Finch UI redesign — Phase 1 audit
+# MynaMod UI redesign — Phase 1 audit
 
 **Date:** 2026-10-24  
-**Policy:** Independent Kivo suite product. No Blender upstream sync.  
+**Policy:** Independent MynaHub suite product. No Blender upstream sync.  
 **Rule:** Do not mix Blender and SketchUp UI conventions. Preserve capability; redesign discovery and control.
 
 Companion canvas: `canvases/oform-unified-ui-redesign.canvas.tsx`  
@@ -11,7 +11,7 @@ Design system: [ui-design-system.md](ui-design-system.md)
 
 ## Verdict
 
-Finch already ships a SketchUp-*inspired* modelling shell on top of a Blender app template: menus, left PROPERTIES rail, paper VIEW_3D, status/VCB, Ask. That is still **two presentation languages stitched together** (PROPERTIES editor + SketchUp tool names + residual `wm.*` chrome). The redesign must introduce an **Finch-owned workspace layer**, then migrate commands into it behind a feature flag—without rewriting the geometry engine.
+MynaMod already ships a SketchUp-*inspired* modelling shell on top of a Blender app template: menus, left PROPERTIES rail, paper VIEW_3D, status/VCB, Ask. That is still **two presentation languages stitched together** (PROPERTIES editor + SketchUp tool names + residual `wm.*` chrome). The redesign must introduce an **MynaMod-owned workspace layer**, then migrate commands into it behind a feature flag—without rewriting the geometry engine.
 
 ---
 
@@ -43,7 +43,7 @@ Full operators live in `tools.py` / `ui.py`. Taxonomy for the new shell:
 | **Organize** | Group · Component · Explode · Enter/Exit · Hide Rest |
 | **Inspect** | Measure · Protractor · Entity Info · Inspect Solid · Delete Guides |
 | **View** | Orbit · Pan · Zoom · Extents · Window · Standard views · Face Style |
-| **Shell** | Theme · Preferences (Finch) · Ask |
+| **Shell** | Theme · Preferences (MynaMod) · Ask |
 
 Classify: **Preserve** engine; **Adapt** presentation; **Hide** unused Blender editors (already largely done); **Defer** Section/Walk/Lasso/.skp.
 
@@ -64,7 +64,7 @@ Classify: **Preserve** engine; **Adapt** presentation; **Hide** unused Blender e
 | Capability | Class |
 | --- | --- |
 | BMesh draw / push-pull / inference / groups / solids | Preserve |
-| Large Tool Set interaction model | Adapt → Finch primary strip + left rail |
+| Large Tool Set interaction model | Adapt → MynaMod primary strip + left rail |
 | Status + VCB | Adapt → single bottom status |
 | Ask | Adapt → inspector or dedicated dock, one entry |
 | Unregistered animation/outliner/etc. | Hide (keep) |
@@ -76,8 +76,8 @@ Classify: **Preserve** engine; **Adapt** presentation; **Hide** unused Blender e
 ## Recommended sequence (locked)
 
 1. **Audit** — this document (done).  
-2. **Design system** — Tren tokens via `brand.py` / `design.py` (done).  
-3. **Product shell** — Tren layout restored (`UI_SHELL_V2=False`): left tools + Entity Info + Ask | canvas | status.  
+2. **Design system** — MynaCAD tokens via `brand.py` / `design.py` (done).  
+3. **Product shell** — MynaCAD layout restored (`UI_SHELL_V2=False`): left tools + Entity Info + Ask | canvas | status.  
 4. **Shell v2** — kept in `shell_v2.py` behind the flag for experiments only.  
 5. **QA** — selection, snap, VCB, undo, files, DPI, themes.
 

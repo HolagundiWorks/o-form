@@ -1,6 +1,6 @@
-# Contributing to Finch
+# Contributing to MynaMod
 
-Finch is developed by Human Centric Works for **the Kivo suite**. It is an independently maintained product whose source tree originated as a Blender 5.2.3 LTS clone.
+MynaMod is developed by Human Centric Works for **the MynaHub suite**. It is an independently maintained product whose source tree originated as a Blender 5.2.3 LTS clone.
 
 **Open Source. Built for Architects. Driven by Community.**
 
@@ -19,8 +19,8 @@ Full developer guide: [docs/developer/architecture.md](docs/developer/architectu
 ## Issues and features
 
 - File issues and feature requests on **this** repository: https://github.com/HolagundiWorks/o-form/issues  
-- Describe the Finch workflow impact, steps to reproduce, and platform (Windows build is the verified product path).  
-- Do not open Blender Foundation tracker tickets expecting them to be handled here, and do not expect projects.blender.org review of Finch patches.
+- Describe the MynaMod workflow impact, steps to reproduce, and platform (Windows build is the verified product path).  
+- Do not open Blender Foundation tracker tickets expecting them to be handled here, and do not expect projects.blender.org review of MynaMod patches.
 
 ## Branches and commits
 
@@ -62,7 +62,7 @@ Releases: [docs/developer/releases.md](docs/developer/releases.md).
 
 - Project policy: [docs/licensing/policy.md](docs/licensing/policy.md).  
 - New third-party code must keep compatible licenses and attribution (`release/license/`, `NOTICE`, file SPDX headers).  
-- Do not rebrand third-party projects as Finch.  
+- Do not rebrand third-party projects as MynaMod.  
 - Do not add a conflicting license to inherited Blender code.  
 - Do not delete `LICENSE`, `COPYING`, `NOTICE`, or third-party notice files.  
 - Map: [docs/licensing/attribution.md](docs/licensing/attribution.md).
@@ -73,4 +73,4 @@ No `SECURITY.md` is published yet. Report security issues privately via the Hola
 
 ## License
 
-Finch is **GPL-2.0-or-later**. Contributions are expected under the same terms as the files you modify, typically **GPL-2.0-or-later**, unless a file header states a compatible existing license that must be preserved.
+MynaMod is **GPL-2.0-or-later**. Contributions are expected under the same terms as the files you modify, typically **GPL-2.0-or-later**, unless a file header states a compatible existing license that must be preserved.

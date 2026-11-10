@@ -1,12 +1,12 @@
-# Finch open-source licensing policy
+# MynaMod open-source licensing policy
 
 **Status:** Repository evidence policy (not a formal legal opinion).  
-**Product:** Finch (the Kivo suite)  
+**Product:** MynaMod (the MynaHub suite)  
 **Repository:** https://github.com/HolagundiWorks/o-form
 
 ## 1. Open-source commitment
 
-Finch is an open-source 3D modelling application. The project provides
+MynaMod is an open-source 3D modelling application. The project provides
 transparent source code, community participation, and independently managed
 development and releases (no Blender upstream remote, merges, or sync).
 
@@ -18,11 +18,11 @@ Independence does **not** cancel license obligations for inherited code.
 | --- | --- |
 | `COPYING` | Points to `doc/license/GPL-license.txt`; Blender Foundation notice |
 | `doc/license/GPL-license.txt` | GNU GPL **Version 2**, June 1991 |
-| Widespread SPDX | `GPL-2.0-or-later` on Blender and Finch sources |
-| Finch template SPDX | `GPL-2.0-or-later` |
+| Widespread SPDX | `GPL-2.0-or-later` on Blender and MynaMod sources |
+| MynaMod template SPDX | `GPL-2.0-or-later` |
 | Packaged notice | `release/text/copyright.txt` states GPL v2 or later |
 
-**Documented arrangement:** Finch, as a modified Blender distribution, remains
+**Documented arrangement:** MynaMod, as a modified Blender distribution, remains
 under the **GNU General Public License, version 2 or later**.
 
 Do **not** introduce a proprietary or GPL-incompatible license for inherited
@@ -33,7 +33,7 @@ reviewed.
 
 | File | Role |
 | --- | --- |
-| [`LICENSE`](../../LICENSE) | Finch project license statement + pointers |
+| [`LICENSE`](../../LICENSE) | MynaMod project license statement + pointers |
 | [`COPYING`](../../COPYING) | Retained Blender convention pointer |
 | [`NOTICE`](../../NOTICE) | Attribution index |
 | [`THIRD_PARTY_LICENSES.md`](../../THIRD_PARTY_LICENSES.md) | Points to third-party inventory |
@@ -44,12 +44,12 @@ reviewed.
 
 ## 4. Copyright and branding
 
-- Finch branding identifies the **product**.  
+- MynaMod branding identifies the **product**.  
 - It does **not** transfer ownership of inherited Blender or third-party code.  
 - Preserve original copyright and SPDX headers.  
-- Add Finch / Human Centric Works notices on original or clearly modified
-  Finch material (for example the `oform` app template).  
-- Do not imply Finch is an official Blender product.
+- Add MynaMod / Human Centric Works notices on original or clearly modified
+  MynaMod material (for example the `oform` app template).  
+- Do not imply MynaMod is an official Blender product.
 
 ## 5. Distribution requirements
 

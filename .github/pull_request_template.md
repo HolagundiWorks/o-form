@@ -1,11 +1,11 @@
 ## Summary
 
-<!-- What changed and why (Finch product / docs / build). -->
+<!-- What changed and why (MynaMod product / docs / build). -->
 
 ## Type
 
 - [ ] Documentation
-- [ ] Finch app template (`scripts/startup/bl_app_templates_system/oform/`)
+- [ ] MynaMod app template (`scripts/startup/bl_app_templates_system/oform/`)
 - [ ] Build / CMake / packaging
 - [ ] Window manager / other C++
 - [ ] Other

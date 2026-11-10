@@ -1,10 +1,10 @@
-# Finch documentation
+# MynaMod documentation
 
-Product documentation for **Finch**, the 3D modelling application in **the Kivo suite**.
+Product documentation for **MynaMod**, the 3D modelling application in **the MynaHub suite**.
 
 **Open Source. Built for Architects. Driven by Community.**
 
-Finch is a clone of Blender 5.2.3 LTS. This `docs/` tree describes the product. Inherited Blender developer manuals and generators remain under [`doc/`](../doc/).
+MynaMod is a clone of Blender 5.2.3 LTS. This `docs/` tree describes the product. Inherited Blender developer manuals and generators remain under [`doc/`](../doc/).
 
 ## Guides
 
@@ -15,11 +15,11 @@ Finch is a clone of Blender 5.2.3 LTS. This `docs/` tree describes the product. 
 | [UI design system](developer/ui-design-system.md) | Tokens, workspace layout, command taxonomy |
 | [Developer guide](developer/architecture.md) | Independence policy, remotes, architecture, checks |
 | [BIM ↔ ShilpiDB](developer/bim-shilpidb.md) | IFC sidecar on shared suite store |
-| [Suite take-off](developer/suite-takeoff.md) | Coherent take-off across Finch · Tren · Falcon |
-| [OSAS project folder](developer/osas-project-folder.md) | Kivo create → draft + form + shilpi + live sync |
-| [OSAS project folder](developer/osas-project-folder.md) | Kivo create → draft + form + shilpi, live sync |
-| [OSAS project folder](developer/osas-project-folder.md) | Kivo create → draft + form + shilpi, live sync |
-| [Releases](developer/releases.md) | Finch-owned versioning and release checklist |
+| [Suite take-off](developer/suite-takeoff.md) | Coherent take-off across MynaMod · MynaCAD · MynaOps |
+| [OSAS project folder](developer/osas-project-folder.md) | MynaHub create → draft + form + shilpi + live sync |
+| [OSAS project folder](developer/osas-project-folder.md) | MynaHub create → draft + form + shilpi, live sync |
+| [OSAS project folder](developer/osas-project-folder.md) | MynaHub create → draft + form + shilpi, live sync |
+| [Releases](developer/releases.md) | MynaMod-owned versioning and release checklist |
 | [Windows build](build/windows.md) | Prerequisites, `make oform`, selftest |
 | [Licensing policy](licensing/policy.md) | Open-source / GPL policy and unresolved questions |
 | [Licensing / attribution](licensing/attribution.md) | Map of LICENSE, COPYING, NOTICE, third-party files |

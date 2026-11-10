@@ -1,6 +1,6 @@
-# Finch design system & workspace specification
+# MynaMod design system & workspace specification
 
-**Status:** Product UI matches **Tren WinUI** Density + ColorTokens.  
+**Status:** Product UI matches **MynaCAD WinUI** Density + ColorTokens.  
 **Flag:** `design.UI_SHELL_V2` off.  
 **Sources:** `O-DRAFT/apps/aad-winui/Density.cs`, `Themes/ColorTokens.xaml`, `ToolCatalog`.
 
@@ -27,7 +27,7 @@ Density: **32 DIP** tool buttons, **280 DIP** side panel, Ask bar max **600**, s
 
 ---
 
-## 2. Workspace layout (Tren WinUI)
+## 2. Workspace layout (MynaCAD WinUI)
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -42,7 +42,7 @@ Density: **32 DIP** tool buttons, **280 DIP** side panel, Ask bar max **600**, s
 └──────────────────────────────────────────────────────────────┘
 ```
 
-Tool strip catalog mirrors Tren `ToolCatalog` (Select, Line, Circle, Arc, Rect, Move, Rotate, Offset, Push/Pull, Trim, Eraser, Measure, Paint).
+Tool strip catalog mirrors MynaCAD `ToolCatalog` (Select, Line, Circle, Arc, Rect, Move, Rotate, Offset, Push/Pull, Trim, Eraser, Measure, Paint).
 
 ---
 

@@ -1,4 +1,4 @@
-# Build Finch on Windows
+# Build MynaMod on Windows
 
 Verified product path: **Windows**, Visual Studio **2022** Build Tools (`2022b`), lite **Release** configuration.
 
@@ -24,7 +24,7 @@ Default branch is `main`.
 
 ## Libraries and compile
 
-Confirm remotes first (`git remote -v`). Routine development uses only the Finch `origin` (https://github.com/HolagundiWorks/o-form.git). Do not add a Blender source upstream.
+Confirm remotes first (`git remote -v`). Routine development uses only the MynaMod `origin` (https://github.com/HolagundiWorks/o-form.git). Do not add a Blender source upstream.
 
 ```
 make update
@@ -40,7 +40,7 @@ Typical output:
 D:\build_windows_OForm_x64_vc17_Release\bin\Release\oform.exe
 ```
 
-`oform.exe` is a POST_BUILD copy of `blender.exe`. Launching it loads the Finch app template.
+`oform.exe` is a POST_BUILD copy of `blender.exe`. Launching it loads the MynaMod app template.
 
 ## Python-only iteration
 
@@ -80,4 +80,4 @@ Expect `oform_check_independence: OK`. See the [developer guide](../developer/ar
 
 ## Other platforms
 
-macOS and Linux Blender build scripts remain in-tree. They are **not** verified Finch product deliverables in this documentation pass.
+macOS and Linux Blender build scripts remain in-tree. They are **not** verified MynaMod product deliverables in this documentation pass.

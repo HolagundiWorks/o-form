@@ -1,24 +1,24 @@
-# Finch
+# MynaMod
 
 **Open Source. Built for Architects. Driven by Community.**
 
-Finch is the 3D modelling application in **the Kivo suite**, developed by [Human Centric Works](https://github.com/HolagundiWorks).
+MynaMod is the 3D modelling application in **the MynaHub suite**, developed by [Human Centric Works](https://github.com/HolagundiWorks).
 
 It is a **clone of [Blender](https://www.blender.org) 5.2.3 LTS**: the full source tree lives here as an independent repository. **No Blender upstream remote, merges, or synchronization** — see the [developer guide](docs/developer/architecture.md). The mesh kernel, `.blend` files, and internal build targets stay Blender’s. The product surface is push/pull solid modelling for architectural workflows—one active tool, a left tool pane, axis locks, and a measurements box.
 
 | | |
 | --- | --- |
-| Product | Finch |
+| Product | MynaMod |
 | Category | 3D modelling |
-| Suite | the Kivo suite |
-| Related | Kivo, Falcon, Tren |
+| Suite | the MynaHub suite |
+| Related | MynaHub, MynaOps, MynaCAD |
 | Developer | Human Centric Works · Hospet |
 | Repository | [github.com/HolagundiWorks/o-form](https://github.com/HolagundiWorks/o-form) |
 | Branch | `main` |
 | Files | `.blend` (export: Wavefront OBJ, glTF) |
 | License | GNU GPL v2 or later ([LICENSE](LICENSE), [COPYING](COPYING)) |
 
-Finch is **not** affiliated with the Blender Foundation or with Trimble. It does not use SketchUp files, icons, or artwork. It includes a **native BIM engine** (classify, storeys, IFC4 import/export) that is **not** BlenderBIM/Bonsai and is **not** IFC-certified. It does **not** claim SketchUp file compatibility.
+MynaMod is **not** affiliated with the Blender Foundation or with Trimble. It does not use SketchUp files, icons, or artwork. It includes a **native BIM engine** (classify, storeys, IFC4 import/export) that is **not** BlenderBIM/Bonsai and is **not** IFC-certified. It does **not** claim SketchUp file compatibility.
 
 ## Documentation
 
@@ -40,7 +40,7 @@ Finch is **not** affiliated with the Blender Foundation or with Trimble. It does
 - App template with the suite brand: Grove accent, Midnight ink, the suite mark on a Grove tile
 - SketchUp-aligned tools: Select, Eraser, Paint, Line, Freehand, Arc, Rectangle, Circle, Polygon, Push/Pull, Follow Me, Offset, Move, Rotate, Scale, Tape Measure, Protractor, Back Edges, Orbit, Pan, Zoom, Zoom Extents
 - Groups and Components (G / Ctrl+G, double-click to edit, Esc to close, Explode)
-- Tren-aligned shell: left tools + Properties/Ask side panels, light/dark toggle, Ask AI with Allow/Decline
+- MynaCAD-aligned shell: left tools + Properties/Ask side panels, light/dark toggle, Ask AI with Allow/Decline
 - SketchUp-like canvas: solid paper, RGB axes, no ground grid
 - SketchUp-style keys (Space, L, A, R, C, P, F, M, Q, S, T, E, B, G, O, H, Z, Shift+Z, plus N/J/X/K/Shift+L/Ctrl+G)
 - Axis locks, typed measurements, basic inference (endpoint, midpoint, on edge, on face, axis)
@@ -61,10 +61,10 @@ Identity module: `scripts/startup/bl_app_templates_system/oform/brand.py`.
 
 | Token | Value |
 | --- | --- |
-| Product | Finch |
+| Product | MynaMod |
 | Subtitle | Modeling |
 | Tagline | Push/pull solid modeling |
-| Suite | the Kivo suite |
+| Suite | the MynaHub suite |
 | Credit | Developed by Human Centric Works · Hospet |
 | Origin | A clone of Blender |
 | Accent | Grove `#166040` (white arcs; dark theme `#3FBF8A`); ink Midnight `#102C80` ([BRANDING.md](docs/BRANDING.md)) |
@@ -107,7 +107,7 @@ Prints `OFORM_SELFTEST_OK` on success.
 
 ## License and attribution
 
-Finch is open source. As a modified Blender distribution it remains under the **GNU GPL, version 2 or later** (`GPL-2.0-or-later`). That is verified from `COPYING`, `doc/license/GPL-license.txt`, and source SPDX headers — not invented for branding.
+MynaMod is open source. As a modified Blender distribution it remains under the **GNU GPL, version 2 or later** (`GPL-2.0-or-later`). That is verified from `COPYING`, `doc/license/GPL-license.txt`, and source SPDX headers — not invented for branding.
 
 | Document | Purpose |
 | --- | --- |
