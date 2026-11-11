@@ -5,9 +5,9 @@ Creating a project in **MynaHub** scaffolds a folder beside the company file:
 ```text
 <company_dir>/projects/<slug>-<id>/
   osas.project.json      # suite envelope
-  draft/model.dxf        # O-Draft starter
-  draft/project.json     # O-Draft wizard seed
-  form/model.blend       # O-Form model (filled on first save)
+  draft/model.dxf        # MynaCAD starter
+  draft/project.json     # MynaCAD wizard seed
+  form/model.blend       # Myna3D model (filled on first save)
   shilpi/project.vdb     # project ShilpiDB (created on first bind)
 ```
 

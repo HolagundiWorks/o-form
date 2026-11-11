@@ -6,7 +6,7 @@
 
 ---
 
-## 1. Design tokens (the suite palette: o-ui `Themes/SuiteColors*.xaml`, brand guide in [BRANDING.md](../BRANDING.md))
+## 1. Design tokens (the suite palette: MynaUI `Themes/SuiteColors*.xaml`, brand guide in [BRANDING.md](../BRANDING.md))
 
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
