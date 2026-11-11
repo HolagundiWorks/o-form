@@ -1,7 +1,7 @@
 # Brand guide: the MynaHub suite
 
 **Canonical copy:** MynaHub `docs/BRANDING.md`. MynaOps and MynaCAD keep an identical copy; **MynaUI** (`MynaUI`) holds the artwork, the colour files and the tool that draws them.
-**Names and terms:** [SUITE.md](SUITE.md). **Written 2026-11-01.**
+**Names and terms:** MynaHub `docs/SUITE.md`. **Written 2026-11-01.**
 
 The idea: **one family name, Myna, and a use-case word for each app** (MynaHub, MynaCAD, MynaOps, Myna3D; decided 2026-11-10 after the user survey). Marks: the three-circle suite mark in each app's colour, and the orb for Myna (restored 2026-11-10). The **AI agent** wears all four colours.
 
