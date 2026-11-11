@@ -2,15 +2,15 @@
 
 **Open Source. Built for Architects. Driven by Community.**
 
-Myna3D is the 3D modelling application in **the MynaHub suite**, developed by [Human Centric Works](https://github.com/HolagundiWorks).
+Myna3D is the 3D modelling application in **the Myna suite**, developed by [Human Centric Works](https://github.com/HolagundiWorks).
 
 It is a **clone of [Blender](https://www.blender.org) 5.2.3 LTS**: the full source tree lives here as an independent repository. **No Blender upstream remote, merges, or synchronization** — see the [developer guide](docs/developer/architecture.md). The mesh kernel, `.blend` files, and internal build targets stay Blender’s. The product surface is push/pull solid modelling for architectural workflows—one active tool, a left tool pane, axis locks, and a measurements box.
 
 | | |
 | --- | --- |
-| Product | Myna3D |
+| Product | Myna3D (formerly MynaMod) |
 | Category | 3D modelling |
-| Suite | the MynaHub suite |
+| Suite | the Myna suite |
 | Related | MynaHub, MynaOps, MynaCAD |
 | Developer | Human Centric Works · Hospet |
 | Repository | [github.com/HolagundiWorks/o-form](https://github.com/HolagundiWorks/o-form) |
@@ -61,10 +61,10 @@ Identity module: `scripts/startup/bl_app_templates_system/oform/brand.py`.
 
 | Token | Value |
 | --- | --- |
-| Product | Myna3D |
+| Product | Myna3D (formerly MynaMod) |
 | Subtitle | Modeling |
 | Tagline | Push/pull solid modeling |
-| Suite | the MynaHub suite |
+| Suite | the Myna suite |
 | Credit | Developed by Human Centric Works · Hospet |
 | Origin | A clone of Blender |
 | Accent | Grove `#166040` (white arcs; dark theme `#3FBF8A`); ink Midnight `#102C80` ([BRANDING.md](docs/BRANDING.md)) |
