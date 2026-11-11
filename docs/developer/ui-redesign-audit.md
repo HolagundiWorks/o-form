@@ -1,4 +1,4 @@
-# MynaMod UI redesign — Phase 1 audit
+# Myna3D UI redesign — Phase 1 audit
 
 **Date:** 2026-10-24  
 **Policy:** Independent MynaHub suite product. No Blender upstream sync.  
@@ -11,7 +11,7 @@ Design system: [ui-design-system.md](ui-design-system.md)
 
 ## Verdict
 
-MynaMod already ships a SketchUp-*inspired* modelling shell on top of a Blender app template: menus, left PROPERTIES rail, paper VIEW_3D, status/VCB, Ask. That is still **two presentation languages stitched together** (PROPERTIES editor + SketchUp tool names + residual `wm.*` chrome). The redesign must introduce an **MynaMod-owned workspace layer**, then migrate commands into it behind a feature flag—without rewriting the geometry engine.
+Myna3D already ships a SketchUp-*inspired* modelling shell on top of a Blender app template: menus, left PROPERTIES rail, paper VIEW_3D, status/VCB, Ask. That is still **two presentation languages stitched together** (PROPERTIES editor + SketchUp tool names + residual `wm.*` chrome). The redesign must introduce an **Myna3D-owned workspace layer**, then migrate commands into it behind a feature flag—without rewriting the geometry engine.
 
 ---
 
@@ -43,7 +43,7 @@ Full operators live in `tools.py` / `ui.py`. Taxonomy for the new shell:
 | **Organize** | Group · Component · Explode · Enter/Exit · Hide Rest |
 | **Inspect** | Measure · Protractor · Entity Info · Inspect Solid · Delete Guides |
 | **View** | Orbit · Pan · Zoom · Extents · Window · Standard views · Face Style |
-| **Shell** | Theme · Preferences (MynaMod) · Ask |
+| **Shell** | Theme · Preferences (Myna3D) · Ask |
 
 Classify: **Preserve** engine; **Adapt** presentation; **Hide** unused Blender editors (already largely done); **Defer** Section/Walk/Lasso/.skp.
 
@@ -64,7 +64,7 @@ Classify: **Preserve** engine; **Adapt** presentation; **Hide** unused Blender e
 | Capability | Class |
 | --- | --- |
 | BMesh draw / push-pull / inference / groups / solids | Preserve |
-| Large Tool Set interaction model | Adapt → MynaMod primary strip + left rail |
+| Large Tool Set interaction model | Adapt → Myna3D primary strip + left rail |
 | Status + VCB | Adapt → single bottom status |
 | Ask | Adapt → inspector or dedicated dock, one entry |
 | Unregistered animation/outliner/etc. | Hide (keep) |

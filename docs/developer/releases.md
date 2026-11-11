@@ -1,13 +1,13 @@
-# MynaMod releases
+# Myna3D releases
 
-MynaMod owns its release process. Releases are **not** synchronized to Blender upstream tags or schedules.
+Myna3D owns its release process. Releases are **not** synchronized to Blender upstream tags or schedules.
 
 ## Versioning
 
 | Kind | Where | Notes |
 | --- | --- | --- |
 | Internal Blender compatibility version | `source/blender/blenkernel/BKE_blender_version.h` (`BLENDER_VERSION` 502 / patch 3 / LTS) | Keeps `.blend` and prebuilt libs aligned. **Do not bump casually.** |
-| MynaMod product release | Git tags / GitHub Releases on this repository | Chosen by MynaMod maintainers; need not match Blender’s marketing version |
+| Myna3D product release | Git tags / GitHub Releases on this repository | Chosen by Myna3D maintainers; need not match Blender’s marketing version |
 
 Do **not** automate “follow latest Blender tag” version sync. Changing `BLENDER_VERSION` can break libraries and file IO; treat it as a compatibility project, not a branding knob.
 
@@ -30,7 +30,7 @@ Do **not** automate “follow latest Blender tag” version sync. Changing `BLEN
 
 ## What not to do
 
-- Do not merge Blender release branches into MynaMod to “catch up.”  
+- Do not merge Blender release branches into Myna3D to “catch up.”  
 - Do not require projects.blender.org for release coordination.  
 - Do not rewrite history when tagging.  
 - Do not ship builds without license/notice files to “simplify” branding.  

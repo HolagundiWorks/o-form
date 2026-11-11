@@ -1,6 +1,6 @@
-# MynaMod BIM ↔ ShilpiDB ↔ MynaCAD
+# Myna3D BIM ↔ ShilpiDB ↔ MynaCAD
 
-MynaMod stores IFC/BIM **semantics** in the same ShilpiDB suite server MynaCAD uses.
+Myna3D stores IFC/BIM **semantics** in the same ShilpiDB suite server MynaCAD uses.
 
 ## Defaults
 
@@ -8,7 +8,7 @@ MynaMod stores IFC/BIM **semantics** in the same ShilpiDB suite server MynaCAD u
 |---|---|---|
 | `shilpid` | `127.0.0.1:7420` | Same as MynaCAD take-off / `vdb.connect` |
 | `shilpi-http` | `127.0.0.1:7421` | JSON gateway for Python |
-| Data file (if MynaMod starts the server) | `%LocalAppData%\OSAS\oform\bim.vdb` | If 7420 already answers (MynaCAD), that store is reused |
+| Data file (if Myna3D starts the server) | `%LocalAppData%\OSAS\oform\bim.vdb` | If 7420 already answers (MynaCAD), that store is reused |
 
 ## Record layout
 
@@ -35,4 +35,4 @@ See [suite-takeoff.md](suite-takeoff.md) for full coherence rules.
 
 ## Not BlenderBIM
 
-Native MynaMod BIM + ShilpiDB. Does not embed Bonsai.
+Native Myna3D BIM + ShilpiDB. Does not embed Bonsai.

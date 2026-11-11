@@ -1,4 +1,4 @@
-# Suite take-off coherence — MynaMod · MynaCAD · MynaOps
+# Suite take-off coherence — Myna3D · MynaCAD · MynaOps
 
 One ShilpiDB store (`127.0.0.1:7420`), one identity, two payload layers.
 
@@ -21,10 +21,10 @@ id = (kind << 56) | (slot << 32) | n
 |------|--------|----------|
 | **1** | `hcw-takeoff-shilpi` header | MynaOps take-off import |
 | **3–8** | bridge rows (walls, openings, …) | MynaOps / MynaCAD |
-| **20** | `oform-ifc-shilpi` header | MynaMod IFC sidecar |
-| **21** | IFC element JSON | MynaMod |
+| **20** | `oform-ifc-shilpi` header | Myna3D IFC sidecar |
+| **21** | IFC element JSON | Myna3D |
 
-## MynaMod modules
+## Myna3D modules
 
 | Module | Role |
 |--------|------|

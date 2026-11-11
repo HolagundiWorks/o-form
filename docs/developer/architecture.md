@@ -1,6 +1,6 @@
-# MynaMod developer guide
+# Myna3D developer guide
 
-Canonical developer documentation for **MynaMod**, the 3D modelling application in **the MynaHub suite**.
+Canonical developer documentation for **Myna3D**, the 3D modelling application in **the MynaHub suite**.
 
 **Open Source. Built for Architects. Driven by Community.**
 
@@ -12,14 +12,14 @@ Related: [Windows build](../build/windows.md) · [Releases](releases.md) · [Con
 
 | | |
 | --- | --- |
-| Product | MynaMod |
+| Product | Myna3D |
 | Parent suite | the MynaHub suite |
 | Purpose | Independently developed 3D modelling with an architectural workflow focus |
-| Ownership | MynaMod maintainers / Human Centric Works |
+| Ownership | Myna3D maintainers / Human Centric Works |
 | Canonical repository | https://github.com/HolagundiWorks/o-form |
 | Default branch | `main` |
 
-MynaMod is **not** an official Blender Foundation product. Product documentation, issues, releases, roadmap, and contribution workflow use **MynaMod** identity only.
+Myna3D is **not** an official Blender Foundation product. Product documentation, issues, releases, roadmap, and contribution workflow use **Myna3D** identity only.
 
 ---
 
@@ -27,7 +27,7 @@ MynaMod is **not** an official Blender Foundation product. Product documentation
 
 **No Blender upstream. No upstream merges. No upstream synchronization. No upstream development dependency.**
 
-MynaMod development must **not** require:
+Myna3D development must **not** require:
 
 - A Blender upstream Git remote  
 - Fetching from Blender’s source repositories for routine work  
@@ -38,7 +38,7 @@ MynaMod development must **not** require:
 - Upstream issue tracking or release coordination  
 - Scripts whose purpose is to fetch or merge Blender **source** into this tree  
 
-All routine development uses MynaMod’s own repository, branches, issues, tests, build, and release process.
+All routine development uses Myna3D’s own repository, branches, issues, tests, build, and release process.
 
 Do **not** add a Blender upstream remote. Do **not** create an upstream synchronization mechanism.
 
@@ -55,7 +55,7 @@ Independence does **not** mean the code has no inherited dependencies or that GP
 
 ---
 
-## 3. Repository setup (MynaMod only)
+## 3. Repository setup (Myna3D only)
 
 ### Clone
 
@@ -107,7 +107,7 @@ Open a pull request against `main` on https://github.com/HolagundiWorks/o-form.
 git remote remove upstream
 ```
 
-3. If `origin` points at the wrong host, fix it only after verifying the intended MynaMod URL:
+3. If `origin` points at the wrong host, fix it only after verifying the intended Myna3D URL:
 
 ```
 git remote -v
@@ -118,24 +118,24 @@ Never delete branches, rewrite history, reset published commits, delete tags, or
 
 ### Libraries vs source remotes
 
-`make update` downloads prebuilt Windows libraries into `lib/`. That may contact Blender infrastructure for **library/LFS assets**. That is dependency fetch, not an invitation to merge Blender source. After any temporary LFS helper remote (historically `lfs-fallback`) is used, remove it so the working tree again has only the MynaMod `origin`. See [Windows build](../build/windows.md).
+`make update` downloads prebuilt Windows libraries into `lib/`. That may contact Blender infrastructure for **library/LFS assets**. That is dependency fetch, not an invitation to merge Blender source. After any temporary LFS helper remote (historically `lfs-fallback`) is used, remove it so the working tree again has only the Myna3D `origin`. See [Windows build](../build/windows.md).
 
 ---
 
-## 4. Architecture (what is MynaMod vs inherited)
+## 4. Architecture (what is Myna3D vs inherited)
 
-MynaMod keeps the inherited mesh kernel, depsgraph, draw manager, and most C/C++ modules. Product behaviour is layered as an **application template**, a **lite CMake config**, and a few window-manager identity hooks. Inherited components are **not** claimed as independently rewritten unless the source shows that.
+Myna3D keeps the inherited mesh kernel, depsgraph, draw manager, and most C/C++ modules. Product behaviour is layered as an **application template**, a **lite CMake config**, and a few window-manager identity hooks. Inherited components are **not** claimed as independently rewritten unless the source shows that.
 
 ### Layout
 
 | Path | Role |
 | --- | --- |
 | `source/blender/` | Inherited C/C++ core |
-| `scripts/startup/bl_app_templates_system/oform/` | **MynaMod product surface** |
+| `scripts/startup/bl_app_templates_system/oform/` | **Myna3D product surface** |
 | `build_files/cmake/config/oform.cmake` | Lite modelling options |
 | `build_files/windows/` | `make oform` wiring |
 | `source/creator/` | POST_BUILD `blender.exe` → `oform.exe` |
-| `docs/` | MynaMod product documentation |
+| `docs/` | Myna3D product documentation |
 | `doc/` | Inherited Sphinx/Doxygen generators |
 | `lib/windows_x64/` | Prebuilt libraries |
 
@@ -168,7 +168,7 @@ Internal symbols stay Blender’s; product naming is thin:
 - Unused Blender UI/addons are **unregistered or deleted**, not hidden (no animation templates, no BVH/pose/rigify/VR/node-wrangler addons; View3D tool shelf / N-panel / asset shelf not created for oform)
 
   
-- Window title / About label `MynaMod`  
+- Window title / About label `Myna3D`  
 - Properties chrome adjustments when `U.app_template == "oform"`  
 
 `--app-template default` still opens the stock Blender layout from the same binary.
@@ -177,7 +177,7 @@ Internal symbols stay Blender’s; product naming is thin:
 
 1. Prefer new behaviour in `scripts/startup/bl_app_templates_system/oform/`.  
 2. Do not rename `bpy`, DNA types, or serialized IDs for branding.  
-3. Keep `BLENDER_VERSION` aligned with the library set you build against (file-format / lib compatibility). That internal version is **not** the MynaMod product release number — see [Releases](releases.md).  
+3. Keep `BLENDER_VERSION` aligned with the library set you build against (file-format / lib compatibility). That internal version is **not** the Myna3D product release number — see [Releases](releases.md).  
 4. Toggle features in `oform.cmake`.  
 5. Python-only edits: copy into the install tree `5.2/scripts/.../oform/` and delete `__pycache__`.
 
@@ -196,27 +196,27 @@ oform.exe --background --factory-startup --python scripts\startup\bl_app_templat
 
 Expect `OFORM_SELFTEST_OK`.
 
-- Inherited suites under `tests/` are Blender-era harnesses; they are not the MynaMod product contract.  
+- Inherited suites under `tests/` are Blender-era harnesses; they are not the Myna3D product contract.  
 - **Independence check:** [Running independence checks](#8-repository-independence-checks).
 
 ---
 
 ## 6. Versioning note
 
-`BLENDER_VERSION` in `BKE_blender_version.h` remains **5.2.3 LTS** for `.blend` and library compatibility. MynaMod **product** releases are versioned separately; do not assume product tags must match Blender release numbers. Details: [Releases](releases.md).
+`BLENDER_VERSION` in `BKE_blender_version.h` remains **5.2.3 LTS** for `.blend` and library compatibility. Myna3D **product** releases are versioned separately; do not assume product tags must match Blender release numbers. Details: [Releases](releases.md).
 
 ---
 
 ## 7. Legal integrity (developers)
 
-MynaMod is open source under **GPL-2.0-or-later** as a Blender derivative. See [licensing policy](../licensing/policy.md).
+Myna3D is open source under **GPL-2.0-or-later** as a Blender derivative. See [licensing policy](../licensing/policy.md).
 
-- Do not replace Blender or third-party copyright notices with MynaMod ownership.  
+- Do not replace Blender or third-party copyright notices with Myna3D ownership.  
 - Do not delete `LICENSE`, `COPYING`, `NOTICE`, `doc/license/*`, or `release/license/*`.  
 - Do not introduce a proprietary or incompatible license for inherited code.  
 - Do not rewrite Git history to erase origin.  
 - Do not claim independence removes GPL or source-distribution obligations.  
-- New MynaMod-only files should use an SPDX header consistent with dependencies (typically `GPL-2.0-or-later`).  
+- New Myna3D-only files should use an SPDX header consistent with dependencies (typically `GPL-2.0-or-later`).  
 - Map: [attribution](../licensing/attribution.md) · evidence: [legal preservation review](../maintenance/legal-preservation-review.md).
 
 ---

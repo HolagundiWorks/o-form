@@ -1,11 +1,11 @@
 ## Summary
 
-<!-- What changed and why (MynaMod product / docs / build). -->
+<!-- What changed and why (Myna3D product / docs / build). -->
 
 ## Type
 
 - [ ] Documentation
-- [ ] MynaMod app template (`scripts/startup/bl_app_templates_system/oform/`)
+- [ ] Myna3D app template (`scripts/startup/bl_app_templates_system/oform/`)
 - [ ] Build / CMake / packaging
 - [ ] Window manager / other C++
 - [ ] Other

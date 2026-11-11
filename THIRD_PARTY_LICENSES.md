@@ -1,6 +1,6 @@
-# Third-party licenses (MynaMod)
+# Third-party licenses (Myna3D)
 
-MynaMod redistributes third-party libraries, fonts, and other components that
+Myna3D redistributes third-party libraries, fonts, and other components that
 are **not** all under the same license as the application.
 
 ## Canonical inventory (do not duplicate here)
@@ -14,16 +14,16 @@ The verified, Blender-maintained inventory shipped with this tree is:
 | [`doc/license/`](doc/license/) | Individual SPDX license text files |
 
 That inventory is generated/maintained via Blender’s `make license` tooling
-(`tools/utils_maintenance/make_license.py`). MynaMod does **not** replace it
+(`tools/utils_maintenance/make_license.py`). Myna3D does **not** replace it
 with a hand-written second copy that could drift.
 
-## How to use this for MynaMod releases
+## How to use this for Myna3D releases
 
 1. Ship `release/license/` with binary packages (same as Blender packaging).  
 2. Ship `release/text/copyright.txt` and `release/text/readme.html`.  
 3. Keep `LICENSE`, `COPYING`, and `NOTICE` available with source distributions.  
 4. When adding a new dependency, update the Blender-era license machinery or
-   document an explicit MynaMod exception in `docs/licensing/` after review —
+   document an explicit Myna3D exception in `docs/licensing/` after review —
    do not silently omit notices.
 
 ## Important caveats (verified vs unresolved)
@@ -32,7 +32,7 @@ with a hand-written second copy that could drift.
 
 - Application source SPDX identifiers commonly use `GPL-2.0-or-later`.  
 - Root `COPYING` points to `doc/license/GPL-license.txt` (GNU GPL Version 2).  
-- MynaMod product modules under `scripts/startup/bl_app_templates_system/oform/`
+- Myna3D product modules under `scripts/startup/bl_app_templates_system/oform/`
   use `GPL-2.0-or-later`.
 
 **Unresolved / needs qualified review**

@@ -1,4 +1,4 @@
-# OSAS project folder — MynaHub · MynaCAD · MynaMod · ShilpiDB
+# OSAS project folder — MynaHub · MynaCAD · Myna3D · ShilpiDB
 
 Creating a project in **MynaHub** scaffolds a folder beside the company file:
 
@@ -21,9 +21,9 @@ Creating a project in **MynaHub** scaffolds a folder beside the company file:
 
 ## Live sync
 
-`sync.mode = "live"` — MynaMod polls ShilpiDB and pushes BIM/take-off when the model changes; MynaCAD / MynaOps read the same `hcw-takeoff-shilpi` header on the same `drawing_id`.
+`sync.mode = "live"` — Myna3D polls ShilpiDB and pushes BIM/take-off when the model changes; MynaCAD / MynaOps read the same `hcw-takeoff-shilpi` header on the same `drawing_id`.
 
-## MynaMod
+## Myna3D
 
 **File → Open Project Folder…** binds `osas.project.json`, starts/joins ShilpiDB on `shilpi/project.vdb`, enables live sync.
 

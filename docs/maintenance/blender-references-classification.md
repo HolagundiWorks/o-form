@@ -7,13 +7,13 @@
 
 | Location | Notes |
 | --- | --- |
-| `README.md` | MynaMod product README |
-| `docs/**` | New MynaMod documentation tree |
-| `CONTRIBUTING.md` | MynaMod contribution entry |
-| `.github/README.md` | Was Blender mirror README; now MynaMod |
-| `.github/pull_request_template.md` | Was projects.blender.org; now MynaMod |
+| `README.md` | Myna3D product README |
+| `docs/**` | New Myna3D documentation tree |
+| `CONTRIBUTING.md` | Myna3D contribution entry |
+| `.github/README.md` | Was Blender mirror README; now Myna3D |
+| `.github/pull_request_template.md` | Was projects.blender.org; now Myna3D |
 | `.github/FUNDING.yml` | Removed (was fund.blender.org) |
-| `release/text/readme.html` | MynaMod end-user readme (prior pass) |
+| `release/text/readme.html` | Myna3D end-user readme (prior pass) |
 | `scripts/.../oform/brand.py`, `ui.py` | Product strings / About |
 
 ## Class B — Legal (preserved)
@@ -24,7 +24,7 @@
 | `AUTHORS` | Blender copyright author list (comment note added only) |
 | `doc/license/*` | License texts |
 | `release/license/*` | Third-party notices |
-| `release/text/copyright.txt` | Blender copyright + MynaMod product lines |
+| `release/text/copyright.txt` | Blender copyright + Myna3D product lines |
 | SPDX `Blender Authors` headers | Required attribution |
 
 ## Class C — Technical (must remain accurate)

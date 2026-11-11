@@ -1,8 +1,8 @@
-# MynaMod user overview
+# Myna3D user overview
 
-MynaMod is the 3D modelling application in **the MynaHub suite**. It is built for focused solid modelling: draw on faces, push and pull, measure as you go.
+Myna3D is the 3D modelling application in **the MynaHub suite**. It is built for focused solid modelling: draw on faces, push and pull, measure as you go.
 
-The product UI is moving to a **single MynaMod design system** (architecture-first chrome, SketchUp-like direct modelling, Blender-class geometry underneath)—not a mix of Blender and SketchUp interfaces. See [UI redesign audit](../developer/ui-redesign-audit.md).
+The product UI is moving to a **single Myna3D design system** (architecture-first chrome, SketchUp-like direct modelling, Blender-class geometry underneath)—not a mix of Blender and SketchUp interfaces. See [UI redesign audit](../developer/ui-redesign-audit.md).
 
 **Principle:** Open Source. Built for Architects. Driven by Community.
 
@@ -23,11 +23,11 @@ The product UI is moving to a **single MynaMod design system** (architecture-fir
 | BIM / IFC4 | Native engine: classify, storeys, IFC I/O; **Push BIM + Take-off** writes suite `hcw-takeoff-shilpi` for MynaCAD / MynaOps |
 | Ask AI | Keyword channel + optional external ask command |
 
-MynaMod is **not** affiliated with the Blender Foundation or Trimble. It does not use SketchUp files, icons, or artwork.
+Myna3D is **not** affiliated with the Blender Foundation or Trimble. It does not use SketchUp files, icons, or artwork.
 
 ## Workspace
 
-On launch, MynaMod opens an editable mesh named `Model` in edit mode. Tab does not leave edit mode. The shell follows the same pattern as **MynaCAD**: menus, left tools/side panels, solid canvas, status bar, and an Ask channel.
+On launch, Myna3D opens an editable mesh named `Model` in edit mode. Tab does not leave edit mode. The shell follows the same pattern as **MynaCAD**: menus, left tools/side panels, solid canvas, status bar, and an Ask channel.
 
 - **Menus:** File, Edit, View, Camera, Draw, Tools, Solids, BIM, Window, Help  
 - **Right-click** in the 3D view opens the **BIM** menu — map the selection to an IFC component (Wall, Slab, Door, …). Edit-mode faces are promoted to a component first.  
@@ -42,7 +42,7 @@ On launch, MynaMod opens an editable mesh named `Model` in edit mode. Tab does n
 
 ## Tools and shortcuts
 
-Defaults follow [SketchUp’s keyboard shortcuts](https://help.sketchup.com/en/default-keyboard-shortcuts) where MynaMod implements the tool.
+Defaults follow [SketchUp’s keyboard shortcuts](https://help.sketchup.com/en/default-keyboard-shortcuts) where Myna3D implements the tool.
 
 | Tool | Key |
 | --- | --- |

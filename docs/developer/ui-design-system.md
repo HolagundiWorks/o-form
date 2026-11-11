@@ -1,4 +1,4 @@
-# MynaMod design system & workspace specification
+# Myna3D design system & workspace specification
 
 **Status:** Product UI matches **MynaCAD WinUI** Density + ColorTokens.  
 **Flag:** `design.UI_SHELL_V2` off.  

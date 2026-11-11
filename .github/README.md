@@ -1,6 +1,6 @@
-# MynaMod on GitHub
+# Myna3D on GitHub
 
-This repository hosts **MynaMod**, a clone of Blender 5.2.3 LTS for OSAS (Open Source Architecture Suit).
+This repository hosts **Myna3D**, a clone of Blender 5.2.3 LTS for OSAS (Open Source Architecture Suit).
 
 **Product documentation starts here:** [../README.md](../README.md)  
 **Guides:** [../docs/README.md](../docs/README.md)

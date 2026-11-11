@@ -1,4 +1,4 @@
-# MynaMod documentation audit inventory
+# Myna3D documentation audit inventory
 
 **Audit date:** 2026-10-23  
 **Repository:** [HolagundiWorks/o-form](https://github.com/HolagundiWorks/o-form)  
@@ -16,11 +16,11 @@ This inventory classifies documentation and documentation-related branding. Lega
 
 | Class | Meaning |
 | --- | --- |
-| A | Product-facing — prefer MynaMod / MynaHub suite identity |
+| A | Product-facing — prefer Myna3D / MynaHub suite identity |
 | B | Legal — preserve copyrights, licenses, notices |
 | C | Technical — keep Blender/API/build identifiers accurate |
 | D | Historical — leave changelogs / provenance |
-| E | External link — update only when a MynaMod destination exists |
+| E | External link — update only when a Myna3D destination exists |
 | T | Third-party / vendored — do not rebrand |
 | G | Generated tooling — leave unless generators are retargeted |
 
@@ -28,11 +28,11 @@ This inventory classifies documentation and documentation-related branding. Lega
 
 | Path | Purpose | Class | Required change | Sensitivity | Verification |
 | --- | --- | --- | --- | --- | --- |
-| `README.md` | Product landing | A | Keep polished MynaMod README; link into `docs/` | Low | Human review; link check |
+| `README.md` | Product landing | A | Keep polished Myna3D README; link into `docs/` | Low | Human review; link check |
 | `COPYING` | Points to GPL text; Blender Foundation notice | B | **Leave** | High | Diff against baseline |
-| `AUTHORS` | Blender author list for copyright | B | Optional short MynaMod note; **do not replace names** | High | Diff |
-| `release/text/readme.html` | Shipped end-user readme | A | MynaMod (already updated) | Medium | Install tree copy |
-| `release/text/copyright.txt` | Packaged copyright | B+A | MynaMod lead-in + Blender copyright retained | High | Diff |
+| `AUTHORS` | Blender author list for copyright | B | Optional short Myna3D note; **do not replace names** | High | Diff |
+| `release/text/readme.html` | Shipped end-user readme | A | Myna3D (already updated) | Medium | Install tree copy |
+| `release/text/copyright.txt` | Packaged copyright | B+A | Myna3D lead-in + Blender copyright retained | High | Diff |
 | `doc/license/*` | Canonical license texts | B | **Leave** | High | File presence |
 | `release/license/license.md` | Third-party overview | B | **Leave** (Blender-era inventory) | High | Diff |
 | `release/license/licenses.json` | Machine-readable licenses | B | **Leave** | High | Diff |
@@ -41,8 +41,8 @@ This inventory classifies documentation and documentation-related branding. Lega
 
 | Path | Purpose | Class | Required change | Sensitivity | Verification |
 | --- | --- | --- | --- | --- | --- |
-| `.github/README.md` | Still Blender mirror README | A | Replace with MynaMod pointer to root README | Medium | Content review |
-| `.github/pull_request_template.md` | Points to projects.blender.org | A | MynaMod PR guidance | Medium | Content review |
+| `.github/README.md` | Still Blender mirror README | A | Replace with Myna3D pointer to root README | Medium | Content review |
+| `.github/pull_request_template.md` | Points to projects.blender.org | A | Myna3D PR guidance | Medium | Content review |
 | `.github/FUNDING.yml` | Blender Foundation funding URL | A/E | Remove Blender fund redirect (no invented HCW URL) | Medium | YAML parse |
 | Issue forms / SECURITY / CODE_OF_CONDUCT | Absent | — | Not fabricated this pass | — | Glob |
 
@@ -52,8 +52,8 @@ This inventory classifies documentation and documentation-related branding. Lega
 | --- | --- | --- | --- | --- | --- |
 | `scripts/.../oform/brand.py` | Colors, product strings | A | Align principle / suite strings | Low | Launch / About |
 | `scripts/.../oform/ui.py` | Menus, About, splash, status | A | Use brand constants | Low | Launch |
-| `source/.../wm_window.cc` | Window title “MynaMod” | A | Already set; leave unless wrong | Medium | Build |
-| `source/.../wm_splash_screen.cc` | About label MynaMod | A | Already set | Medium | Build |
+| `source/.../wm_window.cc` | Window title “Myna3D” | A | Already set; leave unless wrong | Medium | Build |
+| `source/.../wm_splash_screen.cc` | About label Myna3D | A | Already set | Medium | Build |
 | `source/.../wm_files.cc` | Default app template `oform` | C | Leave | Medium | Runtime |
 | `build_files/cmake/config/oform.cmake` | Lite build | C | Leave | Medium | Build |
 | Title-bar exe icon / C About logo | Still Blender assets in binary | A | **Outstanding** (art/binary work) | Medium | Visual |
@@ -73,7 +73,7 @@ This inventory classifies documentation and documentation-related branding. Lega
 | `extern/**`, `lib/**` READMEs | Vendored | T | Leave |
 | `scripts/addons_core/*/README*` | Stock add-ons | C/T | Leave |
 
-## New MynaMod documentation (this audit)
+## New Myna3D documentation (this audit)
 
 | Path | Purpose |
 | --- | --- |

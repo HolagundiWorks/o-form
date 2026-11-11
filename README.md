@@ -1,14 +1,14 @@
-# MynaMod
+# Myna3D
 
 **Open Source. Built for Architects. Driven by Community.**
 
-MynaMod is the 3D modelling application in **the MynaHub suite**, developed by [Human Centric Works](https://github.com/HolagundiWorks).
+Myna3D is the 3D modelling application in **the MynaHub suite**, developed by [Human Centric Works](https://github.com/HolagundiWorks).
 
 It is a **clone of [Blender](https://www.blender.org) 5.2.3 LTS**: the full source tree lives here as an independent repository. **No Blender upstream remote, merges, or synchronization** — see the [developer guide](docs/developer/architecture.md). The mesh kernel, `.blend` files, and internal build targets stay Blender’s. The product surface is push/pull solid modelling for architectural workflows—one active tool, a left tool pane, axis locks, and a measurements box.
 
 | | |
 | --- | --- |
-| Product | MynaMod |
+| Product | Myna3D |
 | Category | 3D modelling |
 | Suite | the MynaHub suite |
 | Related | MynaHub, MynaOps, MynaCAD |
@@ -18,7 +18,7 @@ It is a **clone of [Blender](https://www.blender.org) 5.2.3 LTS**: the full sour
 | Files | `.blend` (export: Wavefront OBJ, glTF) |
 | License | GNU GPL v2 or later ([LICENSE](LICENSE), [COPYING](COPYING)) |
 
-MynaMod is **not** affiliated with the Blender Foundation or with Trimble. It does not use SketchUp files, icons, or artwork. It includes a **native BIM engine** (classify, storeys, IFC4 import/export) that is **not** BlenderBIM/Bonsai and is **not** IFC-certified. It does **not** claim SketchUp file compatibility.
+Myna3D is **not** affiliated with the Blender Foundation or with Trimble. It does not use SketchUp files, icons, or artwork. It includes a **native BIM engine** (classify, storeys, IFC4 import/export) that is **not** BlenderBIM/Bonsai and is **not** IFC-certified. It does **not** claim SketchUp file compatibility.
 
 ## Documentation
 
@@ -61,7 +61,7 @@ Identity module: `scripts/startup/bl_app_templates_system/oform/brand.py`.
 
 | Token | Value |
 | --- | --- |
-| Product | MynaMod |
+| Product | Myna3D |
 | Subtitle | Modeling |
 | Tagline | Push/pull solid modeling |
 | Suite | the MynaHub suite |
@@ -107,7 +107,7 @@ Prints `OFORM_SELFTEST_OK` on success.
 
 ## License and attribution
 
-MynaMod is open source. As a modified Blender distribution it remains under the **GNU GPL, version 2 or later** (`GPL-2.0-or-later`). That is verified from `COPYING`, `doc/license/GPL-license.txt`, and source SPDX headers — not invented for branding.
+Myna3D is open source. As a modified Blender distribution it remains under the **GNU GPL, version 2 or later** (`GPL-2.0-or-later`). That is verified from `COPYING`, `doc/license/GPL-license.txt`, and source SPDX headers — not invented for branding.
 
 | Document | Purpose |
 | --- | --- |

@@ -1,6 +1,6 @@
 # Attribution and licensing index
 
-MynaMod is a clone of Blender. This page **indexes** where legal texts live. It does **not** replace them.
+Myna3D is a clone of Blender. This page **indexes** where legal texts live. It does **not** replace them.
 
 Policy overview: [`policy.md`](policy.md).
 
@@ -8,7 +8,7 @@ Policy overview: [`policy.md`](policy.md).
 
 | Item | Location |
 | --- | --- |
-| Product name | MynaMod |
+| Product name | Myna3D |
 | Developer | Human Centric Works · Hospet |
 | Suite | the MynaHub suite |
 | Principle | Open Source. Built for Architects. Driven by Community. |
@@ -32,9 +32,9 @@ Policy overview: [`policy.md`](policy.md).
 
 ## Provenance statement (for redistributors)
 
-MynaMod redistributes and modifies Blender 5.2.3 LTS source under the GNU General Public License, version 2 or later. Copyright in inherited code remains with the Blender Authors / Blender Foundation and other listed copyright holders. MynaMod product modifications (application template, lite CMake config, window title hooks, documentation, independence tooling) are Copyright 2026 Human Centric Works / MynaMod Authors under the same GPL terms unless a file header says otherwise.
+Myna3D redistributes and modifies Blender 5.2.3 LTS source under the GNU General Public License, version 2 or later. Copyright in inherited code remains with the Blender Authors / Blender Foundation and other listed copyright holders. Myna3D product modifications (application template, lite CMake config, window title hooks, documentation, independence tooling) are Copyright 2026 Human Centric Works / Myna3D Authors under the same GPL terms unless a file header says otherwise.
 
-MynaMod is **not** an official Blender Foundation product. Independent development (no Blender upstream remote) does **not** cancel GPL or third-party notice obligations.
+Myna3D is **not** an official Blender Foundation product. Independent development (no Blender upstream remote) does **not** cancel GPL or third-party notice obligations.
 
 ## Related applications
 
